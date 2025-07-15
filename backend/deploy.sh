@@ -8,7 +8,7 @@ echo "🚀 Starting Dexter AI Backend deployment..."
 if [ -n "$RENDER" ]; then
     echo "📦 Render environment detected"
     echo "🔧 Installing dependencies..."
-    npm ci --only=production
+    npm install --only=production --no-audit --no-fund
     
     echo "✅ Dependencies installed successfully"
     echo "🔍 Checking Node.js version..."
