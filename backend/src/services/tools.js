@@ -329,16 +329,16 @@ class ToolsService {
       let templateUrl;
       if (framework === 'react') {
         // React + Vite template - use a simpler, more reliable template
-        templateUrl = 'degit:antfu/vitesse-react';
+        templateUrl = 'antfu/vitesse-react';
       } else if (framework === 'vue') {
         // Vue + Vite template
-        templateUrl = 'degit:antfu/vitesse';
+        templateUrl = 'antfu/vitesse';
       } else if (framework === 'next') {
         // Next.js template - use a simpler example
-        templateUrl = 'degit:vercel/next.js/examples/hello-world';
+        templateUrl = 'vercel/next.js/examples/hello-world';
       } else {
         // Default to React
-        templateUrl = 'degit:antfu/vitesse-react';
+        templateUrl = 'antfu/vitesse-react';
       }
       
       this.logger.info('Using degit template', { templateUrl });

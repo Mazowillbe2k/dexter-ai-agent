@@ -11,8 +11,8 @@ RUN apk add --no-cache \
     ttf-freefont \
     && rm -rf /var/cache/apk/*
 
-# Install bun
-RUN npm install -g bun
+# Install bun and degit
+RUN npm install -g bun degit
 
 # Set environment variables for Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
