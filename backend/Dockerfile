@@ -28,6 +28,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     # SSL certificates
     ca-certificates \
+    # Install Chromium for puppeteer
+    chromium-browser \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
@@ -40,18 +42,28 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --only=production --no-audit --no-fund
+# Install dependencies with puppeteer optimizations
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV NODE_ENV=production
+RUN npm ci --only=production --no-audit --no-fund --prefer-offline
 
 # Copy source code
 COPY . .
+
+# Create workspace directory
+RUN mkdir -p /workspace
 
 # Create non-root user for security
 RUN groupadd -g 1001 nodejs
 RUN useradd -r -u 1001 -g nodejs nodejs
 
-# Change ownership of the app directory
-RUN chown -R nodejs:nodejs /app
+# Add nodejs user to docker group (if docker group exists)
+RUN groupadd -g 999 docker || true
+RUN usermod -a -G docker nodejs
+
+# Change ownership of the app and workspace directories
+RUN chown -R nodejs:nodejs /app /workspace
 USER nodejs
 
 # Expose port

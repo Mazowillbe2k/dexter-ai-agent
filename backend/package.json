@@ -26,7 +26,8 @@
     "puppeteer": "^21.5.2",
     "node-html-parser": "^6.1.12",
     "groq-sdk": "^0.3.0",
-    "fast-glob": "^3.3.2"
+    "fast-glob": "^3.3.2",
+    "dockerode": "^4.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",

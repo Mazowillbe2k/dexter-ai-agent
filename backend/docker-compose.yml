@@ -14,6 +14,8 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./uploads:/app/uploads
+      - /workspace:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
