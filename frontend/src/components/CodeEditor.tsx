@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
+import FileExplorer from './FileExplorer';
 
 interface FileNode {
   name: string;
@@ -16,14 +17,9 @@ interface CodeEditorProps {
   selectedFile?: string;
   onSaveToBackend?: (path: string, content: string) => Promise<void>;
   onLoadFromBackend?: (path: string) => Promise<string>;
+  onRefreshFiles?: () => void;
+  currentAppId?: string;
 }
-
-// Generate unique keys for file tree items
-let fileKeyCounter = 0;
-const generateFileKey = (path: string) => {
-  fileKeyCounter++;
-  return `file-${path}-${fileKeyCounter}`;
-};
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
   files,
@@ -31,23 +27,13 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   onFileSelect,
   selectedFile,
   onSaveToBackend,
-  onLoadFromBackend
+  onLoadFromBackend,
+  onRefreshFiles,
+  currentAppId
 }) => {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [searchTerm, setSearchTerm] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [originalFileContents, setOriginalFileContents] = useState<Map<string, string>>(new Map());
   const [showDiff, setShowDiff] = useState(false);
-
-  const toggleFolder = (path: string) => {
-    const newExpanded = new Set(expandedFolders);
-    if (newExpanded.has(path)) {
-      newExpanded.delete(path);
-    } else {
-      newExpanded.add(path);
-    }
-    setExpandedFolders(newExpanded);
-  };
 
   // Auto-save to backend when file content changes
   const handleFileContentChange = async (path: string, content: string) => {
@@ -85,64 +71,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       loadFileContent();
     }
   }, [selectedFile, onLoadFromBackend]);
-
-  const renderFileTree = (nodes: FileNode[], level = 0) => {
-    // Separate folders and files
-    const folders = nodes.filter(node => node.type === 'directory');
-    const files = nodes.filter(node => node.type === 'file');
-    
-    // Sort folders and files alphabetically
-    const sortedFolders = folders.sort((a, b) => a.name.localeCompare(b.name));
-    const sortedFiles = files.sort((a, b) => a.name.localeCompare(b.name));
-    
-    // Filter based on search term
-    const filterNode = (node: FileNode) => 
-      !searchTerm || 
-      node.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      node.path.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const filteredFolders = sortedFolders.filter(filterNode);
-    const filteredFiles = sortedFiles.filter(filterNode);
-    
-    return (
-      <>
-        {/* Render folders first */}
-        {filteredFolders.map(node => (
-          <div key={generateFileKey(node.path)} style={{ paddingLeft: `${level * 16}px` }}>
-            <div className="file-tree-item directory">
-              <button
-                className="folder-toggle"
-                onClick={() => toggleFolder(node.path)}
-              >
-                {expandedFolders.has(node.path) ? '📂' : '📁'}
-                <span className="file-name">{node.name}</span>
-              </button>
-              {expandedFolders.has(node.path) && node.children && (
-                <div className="folder-contents">
-                  {renderFileTree(node.children, level + 1)}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-        
-        {/* Render files after folders */}
-        {filteredFiles.map(node => (
-          <div key={generateFileKey(node.path)} style={{ paddingLeft: `${level * 16}px` }}>
-            <div 
-              className={`file-tree-item file ${selectedFile === node.path ? 'selected' : ''} ${isFileModified(node.path) ? 'modified' : ''}`}
-              onClick={() => onFileSelect(node.path)}
-            >
-              <span className="file-icon">
-                {isFileModified(node.path) ? '📝' : '📄'}
-              </span>
-              <span className="file-name">{node.name}</span>
-            </div>
-          </div>
-        ))}
-      </>
-    );
-  };
 
   const getFileContent = (path: string): string => {
     const findFile = (nodes: FileNode[]): FileNode | null => {
@@ -205,19 +133,13 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   return (
     <div className="code-editor">
       <div className="editor-sidebar">
-        <div className="file-explorer-header">
-          <div className="file-explorer-title">Explorer</div>
-          <input
-            type="text"
-            placeholder="Search files..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="file-search"
-          />
-        </div>
-        <div className="file-tree">
-          {renderFileTree(files)}
-        </div>
+        <FileExplorer
+          files={files}
+          onFileSelect={onFileSelect}
+          selectedFile={selectedFile}
+          onRefresh={onRefreshFiles}
+          currentAppId={currentAppId}
+        />
       </div>
       
       <div className="editor-main">
@@ -257,7 +179,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
                 </div>
                 <div className="diff-content">
                   <Editor
-                    height="50%"
+                    height="calc(50% - 15px)"
                     defaultLanguage={getLanguageFromPath(selectedFile)}
                     value={originalFileContents.get(selectedFile) || ''}
                     options={{
@@ -273,7 +195,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
                     }}
                   />
                   <Editor
-                    height="50%"
+                    height="calc(50% - 15px)"
                     defaultLanguage={getLanguageFromPath(selectedFile)}
                     value={getFileContent(selectedFile)}
                     onChange={(value) => handleFileContentChange(selectedFile, value || '')}
@@ -293,7 +215,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
               </div>
             ) : (
               <Editor
-                height="100%"
+                height="calc(100% - 40px)"
                 defaultLanguage={getLanguageFromPath(selectedFile)}
                 value={getFileContent(selectedFile)}
                 onChange={(value) => handleFileContentChange(selectedFile, value || '')}

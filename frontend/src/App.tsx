@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import './App.css'
 import CodeEditor from './components/CodeEditor'
 import Terminal from './components/Terminal'
+import AppPreview from './components/AppPreview'
 
 interface Message {
   id: string
@@ -94,7 +95,11 @@ function App() {
   // Function to sync files with backend for a specific app
   const syncFilesWithBackend = async (appId?: string) => {
     try {
-      const targetAppId = appId || 'current-project'
+      const targetAppId = appId || currentAppId
+      if (!targetAppId) {
+        console.log('No app ID available for file sync')
+        return
+      }
       
       // Get current directory structure from backend for specific app
       const response = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
@@ -116,7 +121,7 @@ function App() {
         const data = await response.json()
         if (data.toolResult && data.toolResult.contents) {
           // Convert backend file structure to frontend format
-          const backendFiles = convertBackendFilesToFrontend(data.toolResult.contents)
+          const backendFiles = await convertBackendFilesToFrontend(data.toolResult.contents, targetAppId)
           setFiles(backendFiles)
         }
       }
@@ -125,26 +130,58 @@ function App() {
     }
   };
 
-  // Function to convert backend file structure to frontend format
-  const convertBackendFilesToFrontend = (contents: any[]): FileNode[] => {
+  // Function to convert backend file structure to frontend format with recursive directory loading
+  const convertBackendFilesToFrontend = async (contents: any[], appId: string): Promise<FileNode[]> => {
     const files: FileNode[] = []
     
     for (const item of contents) {
       if (item.type === 'directory') {
-        // For directories, we'll need to recursively get contents
-        files.push({
-          name: item.name,
-          path: item.path,
-          type: 'directory',
-          children: []
-        })
+        // Recursively get directory contents
+        try {
+          const dirResponse = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              toolName: 'ls',
+              parameters: {
+                relativeDirPath: item.path,
+                appId: appId
+              },
+              userMessage: `List directory contents: ${item.path}`
+            })
+          })
+
+          if (dirResponse.ok) {
+            const dirData = await dirResponse.json()
+            if (dirData.toolResult && dirData.toolResult.contents) {
+              const children = await convertBackendFilesToFrontend(dirData.toolResult.contents, appId)
+              files.push({
+                name: item.name,
+                path: item.path,
+                type: 'directory',
+                children: children
+              })
+            }
+          }
+        } catch (error) {
+          console.error(`Error loading directory ${item.path}:`, error)
+          // Add directory without children if loading fails
+          files.push({
+            name: item.name,
+            path: item.path,
+            type: 'directory',
+            children: []
+          })
+        }
       } else {
         // For files, get the content
         files.push({
           name: item.name,
           path: item.path,
           type: 'file',
-          content: '' // We'll need to fetch content separately
+          content: '' // We'll fetch content when file is selected
         })
       }
     }
@@ -155,7 +192,11 @@ function App() {
   // Function to get file content from backend for a specific app
   const getFileContentFromBackend = async (filePath: string, appId?: string): Promise<string> => {
     try {
-      const targetAppId = appId || 'current-project'
+      const targetAppId = appId || currentAppId
+      if (!targetAppId) {
+        console.log('No app ID available for file read')
+        return ''
+      }
       
       const response = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
         method: 'POST',
@@ -188,7 +229,11 @@ function App() {
   // Function to save file content to backend for a specific app
   const saveFileToBackend = async (filePath: string, content: string, appId?: string) => {
     try {
-      const targetAppId = appId || 'current-project'
+      const targetAppId = appId || currentAppId
+      if (!targetAppId) {
+        console.log('No app ID available for file save')
+        return
+      }
       
       const response = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
         method: 'POST',
@@ -220,7 +265,10 @@ function App() {
   // Function to handle terminal commands for a specific app container
   const handleTerminalCommand = async (command: string, appId?: string): Promise<string> => {
     try {
-      const targetAppId = appId || 'current-project'
+      const targetAppId = appId || currentAppId
+      if (!targetAppId) {
+        return 'No active app. Please create a project first.'
+      }
       
       // Connect to real Render backend for command execution in specific app container
       const response = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
@@ -709,9 +757,7 @@ function App() {
                 
                 {workspaceTab === 'app' && (
                   <div className="app-workspace">
-                    <div className="app-placeholder">
-                      <p>Your app will appear here</p>
-                    </div>
+                    <AppPreview appId={currentAppId} />
                   </div>
                 )}
                 
@@ -724,6 +770,8 @@ function App() {
                       selectedFile={selectedFile}
                       onSaveToBackend={(path, content) => saveFileToBackend(path, content, currentAppId)}
                       onLoadFromBackend={(path) => getFileContentFromBackend(path, currentAppId)}
+                      onRefreshFiles={() => syncFilesWithBackend(currentAppId)}
+                      currentAppId={currentAppId}
                     />
                   </div>
                 )}

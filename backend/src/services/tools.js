@@ -35,11 +35,21 @@ class ToolsService {
   }
 
   // Read file contents
-  async readFile(relativeFilePath, shouldReadEntireFile, startLineOneIndexed, endLineOneIndexed) {
+  async readFile(relativeFilePath, shouldReadEntireFile, startLineOneIndexed, endLineOneIndexed, appId = null) {
     try {
-      this.logger.info('Reading file', { relativeFilePath, shouldReadEntireFile, startLineOneIndexed, endLineOneIndexed });
+      this.logger.info('Reading file', { relativeFilePath, shouldReadEntireFile, startLineOneIndexed, endLineOneIndexed, appId });
       
-      const content = await fs.readFile(relativeFilePath, 'utf8');
+      let fullPath;
+      if (appId) {
+        // Use app-specific directory
+        const workspacePath = process.env.WORKSPACE_PATH || '/workspace';
+        fullPath = path.resolve(path.join(workspacePath, appId, relativeFilePath));
+      } else {
+        // Use current directory
+        fullPath = path.resolve(relativeFilePath);
+      }
+      
+      const content = await fs.readFile(fullPath, 'utf8');
       const lines = content.split('\n');
       
       let result = content;
@@ -53,46 +63,69 @@ class ToolsService {
         totalLines: lines.length,
         startLineOneIndexed,
         endLineOneIndexed,
-        shouldReadEntireFile
+        shouldReadEntireFile,
+        appId
       };
     } catch (error) {
-      this.logger.error('File read failed', { relativeFilePath, error: error.message });
+      this.logger.error('File read failed', { relativeFilePath, appId, error: error.message });
       throw error;
     }
   }
 
   // Edit file
-  async editFile(relativeFilePath, instructions, codeEdit, smartApply = false) {
+  async editFile(relativeFilePath, instructions, codeEdit, smartApply = false, appId = null) {
     try {
-      this.logger.info('Editing file', { relativeFilePath, instructions, smartApply });
+      this.logger.info('Editing file', { relativeFilePath, instructions, smartApply, appId });
       
-      // TODO: Implement actual file editing logic
-      // This would typically validate the edit and apply it safely
+      let fullPath;
+      if (appId) {
+        // Use app-specific directory
+        const workspacePath = process.env.WORKSPACE_PATH || '/workspace';
+        fullPath = path.resolve(path.join(workspacePath, appId, relativeFilePath));
+      } else {
+        // Use current directory
+        fullPath = path.resolve(relativeFilePath);
+      }
+      
+      // Ensure directory exists
+      const dir = path.dirname(fullPath);
+      await fs.mkdir(dir, { recursive: true });
+      
+      // Write the file content
+      await fs.writeFile(fullPath, codeEdit, 'utf8');
       
       return {
         relativeFilePath,
         instructions,
         codeEdit,
         smartApply,
+        appId,
         success: true,
         message: 'File edit completed'
       };
     } catch (error) {
-      this.logger.error('File edit failed', { relativeFilePath, error: error.message });
+      this.logger.error('File edit failed', { relativeFilePath, appId, error: error.message });
       throw error;
     }
   }
 
   // Run bash command
-  async bash(command, requireUserInteraction, startingServer, projectDirectory = null) {
+  async bash(command, requireUserInteraction, startingServer, projectDirectory = null, appId = null) {
     try {
-      this.logger.info('Running bash command', { command, requireUserInteraction, startingServer, projectDirectory });
+      this.logger.info('Running bash command', { command, requireUserInteraction, startingServer, projectDirectory, appId });
+      
+      // If appId is specified, use app-specific directory
+      let workingDirectory = projectDirectory;
+      if (appId) {
+        const workspacePath = process.env.WORKSPACE_PATH || '/workspace';
+        workingDirectory = path.join(workspacePath, appId);
+      }
       
       // If project directory is specified, change to it before running command
       const originalCwd = process.cwd();
-      if (projectDirectory) {
-        process.chdir(projectDirectory);
-        this.logger.info('Changed to project directory', { projectDirectory });
+      if (workingDirectory) {
+        process.chdir(workingDirectory);
+        this.logger.info('Changed to project directory', { workingDirectory });
       }
       
       if (startingServer) {
@@ -100,7 +133,7 @@ class ToolsService {
         const child = exec(command);
         
         // Return to original directory
-        if (projectDirectory) {
+        if (workingDirectory) {
           process.chdir(originalCwd);
         }
         
@@ -110,7 +143,8 @@ class ToolsService {
           running: true,
           requireUserInteraction,
           startingServer,
-          projectDirectory,
+          projectDirectory: workingDirectory,
+          appId,
           message: 'Server command started in background'
         };
       } else {
@@ -118,7 +152,7 @@ class ToolsService {
         const { stdout, stderr } = await execAsync(command);
         
         // Return to original directory
-        if (projectDirectory) {
+        if (workingDirectory) {
           process.chdir(originalCwd);
         }
         
@@ -128,28 +162,38 @@ class ToolsService {
           stderr,
           requireUserInteraction,
           startingServer,
-          projectDirectory,
+          projectDirectory: workingDirectory,
+          appId,
           success: true,
           message: 'Command executed successfully'
         };
       }
     } catch (error) {
       // Return to original directory on error
-      if (projectDirectory) {
+      if (projectDirectory || appId) {
         process.chdir(originalCwd);
       }
       
-      this.logger.error('Bash command failed', { command, error: error.message });
+      this.logger.error('Bash command failed', { command, appId, error: error.message });
       throw new Error(`Command failed: ${command}\n${error.message}`);
     }
   }
 
   // List directory
-  async ls(relativeDirPath = '.') {
+  async ls(relativeDirPath = '.', appId = null) {
     try {
-      this.logger.info('Listing directory', { relativeDirPath });
+      this.logger.info('Listing directory', { relativeDirPath, appId });
       
-      const fullPath = path.resolve(relativeDirPath);
+      let fullPath;
+      if (appId) {
+        // Use app-specific directory
+        const workspacePath = process.env.WORKSPACE_PATH || '/workspace';
+        fullPath = path.resolve(path.join(workspacePath, appId, relativeDirPath));
+      } else {
+        // Use current directory
+        fullPath = path.resolve(relativeDirPath);
+      }
+      
       const items = await fs.readdir(fullPath, { withFileTypes: true });
       
       const contents = items.map(item => ({
@@ -161,10 +205,11 @@ class ToolsService {
       return {
         path: relativeDirPath,
         contents,
-        total: contents.length
+        total: contents.length,
+        appId
       };
     } catch (error) {
-      this.logger.error('Directory listing failed', { relativeDirPath, error: error.message });
+      this.logger.error('Directory listing failed', { relativeDirPath, appId, error: error.message });
       throw error;
     }
   }
@@ -318,23 +363,35 @@ class ToolsService {
   }
 
   // Create file
-  async createFile(targetFile, content) {
+  async createFile(targetFile, content, appId = null) {
     try {
-      this.logger.info('Creating file', { targetFile });
+      this.logger.info('Creating file', { targetFile, appId });
+      
+      let fullPath;
+      if (appId) {
+        // Use app-specific directory
+        const workspacePath = process.env.WORKSPACE_PATH || '/workspace';
+        fullPath = path.resolve(path.join(workspacePath, appId, targetFile));
+      } else {
+        // Use current directory
+        fullPath = path.resolve(targetFile);
+      }
       
       // Ensure directory exists
-      const dir = path.dirname(targetFile);
+      const dir = path.dirname(fullPath);
       await fs.mkdir(dir, { recursive: true });
       
-      await fs.writeFile(targetFile, content, 'utf8');
+      await fs.writeFile(fullPath, content, 'utf8');
       
       return {
         targetFile,
+        content,
+        appId,
         success: true,
         message: 'File created successfully'
       };
     } catch (error) {
-      this.logger.error('File creation failed', { targetFile, error: error.message });
+      this.logger.error('File creation failed', { targetFile, appId, error: error.message });
       throw error;
     }
   }
@@ -664,7 +721,8 @@ class ToolsService {
         case 'createFile':
           return await this.createFile(
             parameters.targetFile,
-            parameters.content
+            parameters.content,
+            parameters.appId
           );
         
         case 'editFile':
@@ -672,25 +730,32 @@ class ToolsService {
             parameters.targetFile,
             parameters.instructions,
             parameters.content,
-            parameters.smartApply
+            parameters.smartApply,
+            parameters.appId
           );
         
         case 'bash':
           return await this.bash(
             parameters.command,
             parameters.requireUserInteraction,
-            parameters.startingServer
+            parameters.startingServer,
+            parameters.projectDirectory,
+            parameters.appId
           );
         
         case 'ls':
-          return await this.ls(parameters.relativeDirPath || parameters.relative_dir_path || '.');
+          return await this.ls(
+            parameters.relativeDirPath || parameters.relative_dir_path || '.',
+            parameters.appId
+          );
         
         case 'readFile':
           return await this.readFile(
             parameters.relativeFilePath || parameters.relative_file_path,
             parameters.shouldReadEntireFile,
             parameters.startLineOneIndexed,
-            parameters.endLineOneIndexed
+            parameters.endLineOneIndexed,
+            parameters.appId
           );
         
         case 'deleteFile':

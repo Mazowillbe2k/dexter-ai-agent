@@ -79,11 +79,13 @@ class AppRuntimeService {
 
       this.logger.info('App container created and started', { appId, port, containerId: container.id });
 
+      const baseUrl = process.env.BASE_URL || 'https://dexter-ai-agent-o4wp.onrender.com';
+      
       return {
         appId,
         port,
         status: 'running',
-        previewUrl: `http://localhost/preview/${appId}`,
+        previewUrl: `${baseUrl}/api/v1/apps/preview/${appId}`,
         directUrl: `http://localhost:${port}`
       };
 
@@ -105,11 +107,13 @@ class AppRuntimeService {
         const container = this.docker.getContainer(app.containerId);
         const containerInfo = await container.inspect();
         
+        const baseUrl = process.env.BASE_URL || 'https://dexter-ai-agent-o4wp.onrender.com';
+        
         return {
           appId,
           status: containerInfo.State.Status,
           port: app.port,
-          previewUrl: `http://localhost/preview/${appId}`,
+          previewUrl: `${baseUrl}/api/v1/apps/preview/${appId}`,
           directUrl: `http://localhost:${app.port}`,
           createdAt: app.createdAt,
           config: app.config
