@@ -114,7 +114,7 @@ class ToolsService {
       }
     } catch (error) {
       this.logger.error('Bash command failed', { command, error: error.message });
-      throw error;
+      throw new Error(`Command failed: ${command}\n${error.message}`);
     }
   }
 
@@ -314,38 +314,67 @@ class ToolsService {
   }
 
   // Startup tool
-  async startup(workspacePath, config = {}) {
+  async startup(framework, projectName, config = {}) {
     try {
-      this.logger.info('Starting up AI agent system', { workspacePath, config });
+      this.logger.info('Starting up AI agent system', { framework, projectName, config });
       
-      // Initialize workspace
+      // Create project directory
+      const workspacePath = `/home/project/${projectName}`;
       await fs.mkdir(workspacePath, { recursive: true });
       
-      // Set up default configuration
-      const defaultConfig = {
-        environment: 'development',
-        logLevel: 'info',
-        maxFileSize: 10485760,
-        allowedOrigins: ['http://localhost:3000'],
-        ...config
-      };
+      // Change to project directory
+      const originalCwd = process.cwd();
+      process.chdir(workspacePath);
       
-      // Create startup log
-      const startupLog = {
-        timestamp: new Date().toISOString(),
-        workspace: workspacePath,
-        config: defaultConfig,
-        status: 'initialized'
-      };
+      let setupCommand;
+      if (framework === 'react') {
+        // Create React project with Vite using bun
+        setupCommand = 'bunx create-vite@latest . --template react --yes';
+      } else if (framework === 'vue') {
+        setupCommand = 'bunx create-vue@latest . --yes';
+      } else if (framework === 'next') {
+        setupCommand = 'bunx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --yes';
+      } else {
+        // Default to React
+        setupCommand = 'bunx create-vite@latest . --template react --yes';
+      }
+      
+      // Execute setup command
+      const { stdout, stderr } = await execAsync(setupCommand);
+      
+      // Install dependencies with bun
+      const { stdout: installOutput, stderr: installError } = await execAsync('bun install');
+      
+      // Update package.json to expose port for iframe
+      const packageJsonPath = path.join(workspacePath, 'package.json');
+      const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+      
+      // Update dev script to expose port
+      if (packageJson.scripts && packageJson.scripts.dev) {
+        if (framework === 'react' || framework === 'vue') {
+          packageJson.scripts.dev = packageJson.scripts.dev.replace('vite', 'vite --host 0.0.0.0');
+        } else if (framework === 'next') {
+          packageJson.scripts.dev = packageJson.scripts.dev.replace('next dev', 'next dev -H 0.0.0.0');
+        }
+      }
+      
+      await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+      
+      // Return to original directory
+      process.chdir(originalCwd);
       
       return {
-        workspace: workspacePath,
-        config: defaultConfig,
+        framework,
+        projectName,
+        workspacePath,
+        stdout: stdout + installOutput,
+        stderr: stderr + installError,
         status: 'started',
-        message: 'AI agent system started successfully'
+        message: `${framework} project '${projectName}' created successfully`,
+        appId: projectName
       };
     } catch (error) {
-      this.logger.error('Startup failed', { workspacePath, error: error.message });
+      this.logger.error('Startup failed', { framework, projectName, error: error.message });
       throw error;
     }
   }
@@ -571,78 +600,109 @@ class ToolsService {
       switch (toolName) {
         case 'startup':
           return await this.startup(
-            parameters.project_name,
             parameters.framework,
-            parameters.shadcn_theme
+            parameters.projectName || parameters.project_name,
+            parameters.config || {}
           );
         
-        case 'task_agent':
-          return await this.taskAgent(
-            parameters.prompt,
-            parameters.integrations,
-            parameters.relative_file_paths
+        case 'createFile':
+          return await this.createFile(
+            parameters.targetFile,
+            parameters.content
+          );
+        
+        case 'editFile':
+          return await this.editFile(
+            parameters.targetFile,
+            parameters.instructions,
+            parameters.content,
+            parameters.smartApply
           );
         
         case 'bash':
           return await this.bash(
             parameters.command,
-            parameters.require_user_interaction,
-            parameters.starting_server
+            parameters.requireUserInteraction,
+            parameters.startingServer
           );
         
         case 'ls':
-          return await this.ls(parameters.relative_dir_path);
+          return await this.ls(parameters.relativeDirPath || parameters.relative_dir_path || '.');
         
-        case 'glob':
-          return await this.glob(parameters.pattern, parameters.exclude_pattern);
+        case 'readFile':
+          return await this.readFile(
+            parameters.relativeFilePath || parameters.relative_file_path,
+            parameters.shouldReadEntireFile,
+            parameters.startLineOneIndexed,
+            parameters.endLineOneIndexed
+          );
+        
+        case 'deleteFile':
+          return await this.deleteFile(parameters.relativeFilePath || parameters.relative_file_path);
         
         case 'grep':
           return await this.grep(
             parameters.query,
-            parameters.case_sensitive,
-            parameters.include_pattern,
-            parameters.exclude_pattern
+            parameters.caseSensitive,
+            parameters.includePattern,
+            parameters.excludePattern
           );
         
-        case 'read_file':
-          return await this.readFile(
-            parameters.relative_file_path,
-            parameters.should_read_entire_file,
-            parameters.start_line_one_indexed,
-            parameters.end_line_one_indexed
+        case 'fileSearch':
+          return await this.fileSearch(parameters.query);
+        
+        case 'webSearch':
+          return await this.webSearch(
+            parameters.searchTerm,
+            parameters.type
           );
         
-        case 'delete_file':
-          return await this.deleteFile(parameters.relative_file_path);
-        
-        case 'edit_file':
-          return await this.editFile(
-            parameters.relative_file_path,
-            parameters.instructions,
-            parameters.code_edit,
-            parameters.smart_apply
+        case 'webScrape':
+          return await this.webScrape(
+            parameters.url,
+            parameters.theme,
+            parameters.viewport,
+            parameters.includeScreenshot
           );
         
-        case 'string_replace':
+        case 'stringReplace':
           return await this.stringReplace(
-            parameters.relative_file_path,
-            parameters.old_string,
-            parameters.new_string,
-            parameters.replace_all
+            parameters.relativeFilePath,
+            parameters.oldString,
+            parameters.newString,
+            parameters.replaceAll
           );
         
-        case 'run_linter':
+        case 'taskAgent':
+          return await this.taskAgent(
+            parameters.task,
+            parameters.parameters || {}
+          );
+        
+        case 'mcpServer':
+          return await this.mcpServer(
+            parameters.action,
+            parameters.data || {}
+          );
+        
+        case 'glob':
+          return await this.glob(
+            parameters.pattern,
+            parameters.excludePattern
+          );
+        
+        case 'runLinter':
           return await this.runLinter(
-            parameters.project_directory,
-            parameters.package_manager
+            parameters.projectDirectory,
+            parameters.packageManager
           );
         
         case 'versioning':
           return await this.versioning(
-            parameters.project_directory,
-            parameters.version_title,
-            parameters.version_changelog,
-            parameters.version_number
+            parameters.projectDirectory,
+            parameters.versionTitle,
+            parameters.versionChangelog,
+            parameters.versionNumber
           );
         
         case 'suggestions':
@@ -650,22 +710,8 @@ class ToolsService {
         
         case 'deploy':
           return await this.deploy(
-            parameters.deploy_as_static_site,
-            parameters.deploy_as_dynamic_site
-          );
-        
-        case 'web_search':
-          return await this.webSearch(
-            parameters.search_term,
-            parameters.type
-          );
-        
-        case 'web_scrape':
-          return await this.webScrape(
-            parameters.url,
-            parameters.theme,
-            parameters.viewport,
-            parameters.include_screenshot
+            parameters.deployAsStaticSite,
+            parameters.deployAsDynamicSite
           );
         
         default:

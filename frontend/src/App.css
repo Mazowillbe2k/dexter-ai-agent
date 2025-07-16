@@ -788,6 +788,35 @@ body {
   position: relative;
 }
 
+.editor-main-content {
+  position: relative;
+  height: 100%;
+}
+
+.save-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #4ec9b0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 10;
+}
+
+.save-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #3c3c3c;
+  border-top: 2px solid #4ec9b0;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
 .editor-placeholder {
   display: flex;
   flex-direction: column;
@@ -961,6 +990,31 @@ body {
 
 .terminal-workspace .terminal {
   height: 100%;
+}
+
+/* Current app indicator */
+.current-app-indicator {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #4ec9b0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 10;
+}
+
+.app-label {
+  color: #8a8a8a;
+}
+
+.app-id {
+  font-weight: 600;
+  color: #4ec9b0;
 }
 
 /* Auto-switched tab indicators */

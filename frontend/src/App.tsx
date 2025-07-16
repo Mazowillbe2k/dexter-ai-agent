@@ -28,6 +28,13 @@ interface FileNode {
   content?: string;
 }
 
+// Generate unique IDs
+let messageIdCounter = 0;
+const generateMessageId = () => {
+  messageIdCounter++;
+  return `msg-${Date.now()}-${messageIdCounter}`;
+};
+
 function App() {
   const [projects, setProjects] = useState<Project[]>([])
   const [messages, setMessages] = useState<Message[]>([])
@@ -45,6 +52,7 @@ function App() {
   // Terminal state
   const [terminalOutput, setTerminalOutput] = useState<string[]>([])
   const [isTerminalConnected, setIsTerminalConnected] = useState(false)
+  const [currentAppId, setCurrentAppId] = useState<string>('')
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -171,9 +179,138 @@ root.render(
     setSelectedFile(path);
   };
 
-  const handleTerminalCommand = async (command: string): Promise<string> => {
+  // Function to sync files with backend for a specific app
+  const syncFilesWithBackend = async (appId?: string) => {
     try {
-      // Connect to backend for real command execution
+      const targetAppId = appId || 'current-project'
+      
+      // Get current directory structure from backend for specific app
+      const response = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          toolName: 'ls',
+          parameters: {
+            relativeDirPath: '.',
+            appId: targetAppId
+          },
+          userMessage: `List current directory contents for app: ${targetAppId}`
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.toolResult && data.toolResult.contents) {
+          // Convert backend file structure to frontend format
+          const backendFiles = convertBackendFilesToFrontend(data.toolResult.contents)
+          setFiles(backendFiles)
+        }
+      }
+    } catch (error) {
+      console.error('Error syncing files:', error)
+    }
+  };
+
+  // Function to convert backend file structure to frontend format
+  const convertBackendFilesToFrontend = (contents: any[]): FileNode[] => {
+    const files: FileNode[] = []
+    
+    for (const item of contents) {
+      if (item.type === 'directory') {
+        // For directories, we'll need to recursively get contents
+        files.push({
+          name: item.name,
+          path: item.path,
+          type: 'directory',
+          children: []
+        })
+      } else {
+        // For files, get the content
+        files.push({
+          name: item.name,
+          path: item.path,
+          type: 'file',
+          content: '' // We'll need to fetch content separately
+        })
+      }
+    }
+    
+    return files
+  };
+
+  // Function to get file content from backend for a specific app
+  const getFileContentFromBackend = async (filePath: string, appId?: string): Promise<string> => {
+    try {
+      const targetAppId = appId || 'current-project'
+      
+      const response = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          toolName: 'readFile',
+          parameters: {
+            relativeFilePath: filePath,
+            appId: targetAppId
+          },
+          userMessage: `Read file content: ${filePath} from app: ${targetAppId}`
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.toolResult && data.toolResult.content) {
+          return data.toolResult.content
+        }
+      }
+      return ''
+    } catch (error) {
+      console.error('Error reading file:', error)
+      return ''
+    }
+  };
+
+  // Function to save file content to backend for a specific app
+  const saveFileToBackend = async (filePath: string, content: string, appId?: string) => {
+    try {
+      const targetAppId = appId || 'current-project'
+      
+      const response = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          toolName: 'editFile',
+          parameters: {
+            targetFile: filePath,
+            instructions: 'Update file content',
+            content: content,
+            appId: targetAppId
+          },
+          userMessage: `Save file: ${filePath} to app: ${targetAppId}`
+        })
+      })
+
+      if (response.ok) {
+        console.log('File saved successfully')
+      } else {
+        console.error('Failed to save file')
+      }
+    } catch (error) {
+      console.error('Error saving file:', error)
+    }
+  };
+
+  // Function to handle terminal commands for a specific app container
+  const handleTerminalCommand = async (command: string, appId?: string): Promise<string> => {
+    try {
+      const targetAppId = appId || 'current-project'
+      
+      // Connect to real Render backend for command execution in specific app container
       const response = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
         method: 'POST',
         headers: {
@@ -182,9 +319,10 @@ root.render(
         body: JSON.stringify({
           toolName: 'bash',
           parameters: {
-            command: command
+            command: command,
+            appId: targetAppId
           },
-          userMessage: `Execute command: ${command}`
+          userMessage: `Execute command: ${command} in app: ${targetAppId}`
         })
       })
 
@@ -206,35 +344,7 @@ root.render(
       }
     } catch (error) {
       console.error('Terminal command error:', error)
-      
-      // Fallback to simulated commands for demo purposes
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      switch (command.toLowerCase()) {
-        case 'ls':
-        case 'dir':
-          return 'src/\npackage.json\nREADME.md\n';
-        case 'pwd':
-          return '/home/project\n';
-        case 'npm start':
-          return 'Starting the development server...\n\nCompiled successfully!\n\nYou can now view dexter-app in the browser.\n\n  Local:            http://localhost:3000\n  On Your Network:  http://192.168.1.100:3000\n\nNote that the development build is not optimized.\nTo create a production build, use npm run build.\n';
-        case 'npm install':
-          return 'added 1234 packages, and audited 1234 packages in 1s\n\n1234 packages are looking for funding\n  run \`npm fund\` for details\n\nfound 0 vulnerabilities\n';
-        case 'help':
-          return `Available commands:
-  ls, dir          - List directory contents
-  pwd              - Print working directory
-  npm start        - Start development server
-  npm install      - Install dependencies
-  npm run build    - Build for production
-  clear            - Clear terminal
-  help             - Show this help message\n`;
-        case 'clear':
-          setTerminalOutput([]);
-          return '';
-        default:
-          return `Command not found: ${command}\nType 'help' for available commands.\n`;
-      }
+      return `Error executing command: ${error instanceof Error ? error.message : 'Unknown error'}`
     }
   };
 
@@ -243,7 +353,7 @@ root.render(
     if (!inputValue.trim() || isLoading) return
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: generateMessageId(),
       role: 'user',
       content: inputValue,
       timestamp: new Date()
@@ -300,7 +410,7 @@ root.render(
                       lastMessage.content = assistantMessage
                     } else {
                       newMessages.push({
-                        id: Date.now().toString(),
+                        id: generateMessageId(),
                         role: 'assistant',
                         content: assistantMessage,
                         timestamp: new Date()
@@ -357,6 +467,11 @@ root.render(
                     hasFileOperations = true
                     setWorkspaceTab('editor')
                     setAutoSwitchedTab('editor')
+                    
+                    // Track the app that was created
+                    if (data.result && data.result.appId) {
+                      setCurrentAppId(data.result.appId)
+                    }
                   }
                   break
                   
@@ -379,7 +494,7 @@ root.render(
                   lastMessage.content = assistantMessage
                 } else {
                   newMessages.push({
-                    id: Date.now().toString(),
+                    id: generateMessageId(),
                     role: 'assistant',
                     content: assistantMessage,
                     timestamp: new Date()
@@ -395,7 +510,7 @@ root.render(
     } catch (error) {
       console.error('Error:', error)
       setMessages(prev => [...prev, {
-        id: Date.now().toString(),
+        id: generateMessageId(),
         role: 'assistant',
         content: 'Sorry, I encountered an error. Please try again.',
         timestamp: new Date()
@@ -482,6 +597,13 @@ root.render(
       return () => clearTimeout(timer)
     }
   }, [autoSwitchedTab])
+
+  // Sync files with backend when editor tab is opened
+  useEffect(() => {
+    if (workspaceTab === 'editor' && currentAppId) {
+      syncFilesWithBackend(currentAppId)
+    }
+  }, [workspaceTab, currentAppId])
 
   return (
     <div className="app">
@@ -655,6 +777,13 @@ root.render(
 
               {/* Workspace Content */}
               <div className="workspace-content">
+                {currentAppId && (
+                  <div className="current-app-indicator">
+                    <span className="app-label">Active App:</span>
+                    <span className="app-id">{currentAppId}</span>
+                  </div>
+                )}
+                
                 {workspaceTab === 'app' && (
                   <div className="app-workspace">
                     <div className="app-placeholder">
@@ -670,6 +799,8 @@ root.render(
                       onFileChange={handleFileChange}
                       onFileSelect={handleFileSelect}
                       selectedFile={selectedFile}
+                      onSaveToBackend={(path, content) => saveFileToBackend(path, content, currentAppId)}
+                      onLoadFromBackend={(path) => getFileContentFromBackend(path, currentAppId)}
                     />
                   </div>
                 )}
@@ -677,7 +808,7 @@ root.render(
                 {workspaceTab === 'terminal' && (
                   <div className="terminal-workspace">
                     <Terminal
-                      onCommand={handleTerminalCommand}
+                      onCommand={(command) => handleTerminalCommand(command, currentAppId)}
                       initialDirectory="/home/project"
                       output={terminalOutput}
                     />

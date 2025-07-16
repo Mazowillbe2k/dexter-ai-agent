@@ -13,6 +13,13 @@ interface TerminalProps {
   output?: string[];
 }
 
+// Generate unique IDs
+let idCounter = 0;
+const generateId = () => {
+  idCounter++;
+  return `${Date.now()}-${idCounter}`;
+};
+
 const Terminal: React.FC<TerminalProps> = ({ 
   onCommand, 
   initialDirectory = '/home/project',
@@ -37,7 +44,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
   const addOutput = (type: 'command' | 'output' | 'error', content: string) => {
     const newOutput: TerminalOutput = {
-      id: Date.now().toString(),
+      id: generateId(),
       type,
       content,
       timestamp: new Date()

@@ -14,16 +14,28 @@ interface CodeEditorProps {
   onFileChange: (path: string, content: string) => void;
   onFileSelect: (path: string) => void;
   selectedFile?: string;
+  onSaveToBackend?: (path: string, content: string) => Promise<void>;
+  onLoadFromBackend?: (path: string) => Promise<string>;
 }
+
+// Generate unique keys for file tree items
+let fileKeyCounter = 0;
+const generateFileKey = (path: string) => {
+  fileKeyCounter++;
+  return `file-${path}-${fileKeyCounter}`;
+};
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
   files,
   onFileChange,
   onFileSelect,
-  selectedFile
+  selectedFile,
+  onSaveToBackend,
+  onLoadFromBackend
 }) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const toggleFolder = (path: string) => {
     const newExpanded = new Set(expandedFolders);
@@ -35,6 +47,41 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     setExpandedFolders(newExpanded);
   };
 
+  // Auto-save to backend when file content changes
+  const handleFileContentChange = async (path: string, content: string) => {
+    onFileChange(path, content);
+    
+    // Save to backend if function is provided
+    if (onSaveToBackend) {
+      setIsSaving(true);
+      try {
+        await onSaveToBackend(path, content);
+      } catch (error) {
+        console.error('Failed to save to backend:', error);
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  // Load file content from backend when file is selected
+  useEffect(() => {
+    if (selectedFile && onLoadFromBackend) {
+      const loadFileContent = async () => {
+        try {
+          const content = await onLoadFromBackend(selectedFile);
+          if (content) {
+            onFileChange(selectedFile, content);
+          }
+        } catch (error) {
+          console.error('Failed to load file from backend:', error);
+        }
+      };
+      
+      loadFileContent();
+    }
+  }, [selectedFile, onLoadFromBackend]);
+
   const renderFileTree = (nodes: FileNode[], level = 0) => {
     return nodes
       .filter(node => 
@@ -43,7 +90,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         node.path.toLowerCase().includes(searchTerm.toLowerCase())
       )
       .map(node => (
-        <div key={node.path} style={{ paddingLeft: `${level * 16}px` }}>
+        <div key={generateFileKey(node.path)} style={{ paddingLeft: `${level * 16}px` }}>
           {node.type === 'directory' ? (
             <div className="file-tree-item directory">
               <button
@@ -144,23 +191,31 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       
       <div className="editor-main">
         {selectedFile ? (
-          <Editor
-            height="100%"
-            defaultLanguage={getLanguageFromPath(selectedFile)}
-            value={getFileContent(selectedFile)}
-            onChange={(value) => onFileChange(selectedFile, value || '')}
-            options={{
-              minimap: { enabled: true },
-              fontSize: 14,
-              fontFamily: 'JetBrains Mono, Consolas, monospace',
-              lineNumbers: 'on',
-              roundedSelection: false,
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              wordWrap: 'on',
-              theme: 'vs-dark'
-            }}
-          />
+          <div className="editor-main-content">
+            {isSaving && (
+              <div className="save-indicator">
+                <span className="save-spinner"></span>
+                Saving...
+              </div>
+            )}
+            <Editor
+              height="100%"
+              defaultLanguage={getLanguageFromPath(selectedFile)}
+              value={getFileContent(selectedFile)}
+              onChange={(value) => handleFileContentChange(selectedFile, value || '')}
+              options={{
+                minimap: { enabled: true },
+                fontSize: 14,
+                fontFamily: 'JetBrains Mono, Consolas, monospace',
+                lineNumbers: 'on',
+                roundedSelection: false,
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                wordWrap: 'on',
+                theme: 'vs-dark'
+              }}
+            />
+          </div>
         ) : (
           <div className="editor-placeholder">
             <div className="placeholder-icon">📄</div>
