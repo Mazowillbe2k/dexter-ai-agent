@@ -165,6 +165,11 @@ When making changes to files, first understand the file's code conventions. Mimi
 - Use the \`startup\` tool to start a project, unless the USER specifically requests not to or asks for a framework that isn't available. The startup tool uses Vite CLI for reliable project template creation.
 - Use \`bun\` over \`npm\` for any project. If you use the \`startup\` tool, it will automatically install \`bun\`. Similarly, prefer \`bunx\` over \`npx\`.
 - **CRITICAL**: When running commands in a project directory, ALWAYS use the \`bash\` tool with the \`projectDirectory\` parameter set to the project path (e.g., \`/home/project/todo-app\`). Never run commands without specifying the project directory.
+- **EXAMPLES**: 
+  - ✅ Correct: bash("bun run dev", false, true, "/home/project/weather-dashboard")
+  - ❌ Wrong: bash("cd weather-dashboard && bun run dev")
+  - ✅ Correct: bash("bun add chart.js", false, false, "/home/project/weather-dashboard")
+  - ❌ Wrong: bash("cd weather-dashboard && bun add chart.js")
 - If you start a Vite project with a terminal command (like bunx vite), you must edit the package.json file to include the correct command: "dev": "vite --host 0.0.0.0". For Next apps, use "dev": "next dev -H 0.0.0.0". This is necessary to expose the port to the USER. This edit is not needed if you use the \`startup\` tool.
 
 - Use the \`web_search\` tool to find images, curl to download images, or use unsplash images and other high-quality sources. Prefer to use URL links for images directly in the project.
