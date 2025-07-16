@@ -84,35 +84,61 @@ class ToolsService {
   }
 
   // Run bash command
-  async bash(command, requireUserInteraction, startingServer) {
+  async bash(command, requireUserInteraction, startingServer, projectDirectory = null) {
     try {
-      this.logger.info('Running bash command', { command, requireUserInteraction, startingServer });
+      this.logger.info('Running bash command', { command, requireUserInteraction, startingServer, projectDirectory });
+      
+      // If project directory is specified, change to it before running command
+      const originalCwd = process.cwd();
+      if (projectDirectory) {
+        process.chdir(projectDirectory);
+        this.logger.info('Changed to project directory', { projectDirectory });
+      }
       
       if (startingServer) {
         // Run in background for server processes
         const child = exec(command);
+        
+        // Return to original directory
+        if (projectDirectory) {
+          process.chdir(originalCwd);
+        }
+        
         return {
           command,
           pid: child.pid,
           running: true,
           requireUserInteraction,
           startingServer,
+          projectDirectory,
           message: 'Server command started in background'
         };
       } else {
         // Run synchronously
         const { stdout, stderr } = await execAsync(command);
+        
+        // Return to original directory
+        if (projectDirectory) {
+          process.chdir(originalCwd);
+        }
+        
         return {
           command,
           stdout,
           stderr,
           requireUserInteraction,
           startingServer,
+          projectDirectory,
           success: true,
           message: 'Command executed successfully'
         };
       }
     } catch (error) {
+      // Return to original directory on error
+      if (projectDirectory) {
+        process.chdir(originalCwd);
+      }
+      
       this.logger.error('Bash command failed', { command, error: error.message });
       throw new Error(`Command failed: ${command}\n${error.message}`);
     }
@@ -344,50 +370,24 @@ class ToolsService {
       const originalCwd = process.cwd();
       process.chdir(workspacePath);
       
-      let templateUrl;
+      // Use Vite CLI directly with templates
+      let setupCommand;
       if (framework === 'react') {
-        // React + Vite template - use a simpler, more reliable template
-        templateUrl = 'antfu/vitesse-react';
+        setupCommand = 'bunx create-vite@latest . --template react-ts --yes';
       } else if (framework === 'vue') {
-        // Vue + Vite template
-        templateUrl = 'antfu/vitesse';
+        setupCommand = 'bunx create-vite@latest . --template vue-ts --yes';
       } else if (framework === 'next') {
-        // Next.js template - use a simpler example
-        templateUrl = 'vercel/next.js/examples/hello-world';
+        setupCommand = 'bunx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --yes';
       } else {
-        // Default to React
-        templateUrl = 'antfu/vitesse-react';
+        setupCommand = 'bunx create-vite@latest . --template react-ts --yes';
       }
       
-      this.logger.info('Using degit template', { templateUrl });
+      this.logger.info('Using Vite CLI with template', { setupCommand });
       
-      // Try degit first, fallback to create-vite if it fails
-      let degitOutput, degitError;
-      try {
-        const result = await execAsync(`bunx degit ${templateUrl} . --force`);
-        degitOutput = result.stdout;
-        degitError = result.stderr;
-        this.logger.info('Degit completed successfully', { degitOutput, degitError });
-      } catch (degitFailed) {
-        this.logger.warn('Degit failed, falling back to create-vite', { error: degitFailed.message });
-        
-        // Fallback to create-vite approach
-        let setupCommand;
-        if (framework === 'react') {
-          setupCommand = 'bunx create-vite@latest . --template react --yes';
-        } else if (framework === 'vue') {
-          setupCommand = 'bunx create-vue@latest . --yes';
-        } else if (framework === 'next') {
-          setupCommand = 'bunx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --yes';
-        } else {
-          setupCommand = 'bunx create-vite@latest . --template react --yes';
-        }
-        
-        const result = await execAsync(setupCommand);
-        degitOutput = result.stdout;
-        degitError = result.stderr;
-        this.logger.info('Create-vite fallback completed', { degitOutput, degitError });
-      }
+      const result = await execAsync(setupCommand);
+      const degitOutput = result.stdout;
+      const degitError = result.stderr;
+      this.logger.info('Project creation completed', { degitOutput, degitError });
       
       // Check if package.json exists
       const packageJsonPath = path.join(workspacePath, 'package.json');
@@ -426,7 +426,7 @@ class ToolsService {
         stdout: degitOutput + installOutput,
         stderr: degitError + installError,
         status: 'started',
-        message: `${framework} project '${projectName}' created successfully using degit`,
+        message: `${framework} project '${projectName}' created successfully using Vite CLI`,
         appId: projectName
       };
     } catch (error) {
