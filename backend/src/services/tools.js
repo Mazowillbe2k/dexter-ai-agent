@@ -328,27 +328,63 @@ class ToolsService {
       
       let templateUrl;
       if (framework === 'react') {
-        // React + Vite template
-        templateUrl = 'degit:vitejs/vite/packages/create-vite/templates/react';
+        // React + Vite template - use a simpler, more reliable template
+        templateUrl = 'degit:antfu/vitesse-react';
       } else if (framework === 'vue') {
         // Vue + Vite template
-        templateUrl = 'degit:vitejs/vite/packages/create-vite/templates/vue';
+        templateUrl = 'degit:antfu/vitesse';
       } else if (framework === 'next') {
-        // Next.js template
+        // Next.js template - use a simpler example
         templateUrl = 'degit:vercel/next.js/examples/hello-world';
       } else {
         // Default to React
-        templateUrl = 'degit:vitejs/vite/packages/create-vite/templates/react';
+        templateUrl = 'degit:antfu/vitesse-react';
       }
       
-      // Use degit to create project template
-      const { stdout: degitOutput, stderr: degitError } = await execAsync(`bunx degit ${templateUrl} . --force`);
+      this.logger.info('Using degit template', { templateUrl });
+      
+      // Try degit first, fallback to create-vite if it fails
+      let degitOutput, degitError;
+      try {
+        const result = await execAsync(`bunx degit ${templateUrl} . --force`);
+        degitOutput = result.stdout;
+        degitError = result.stderr;
+        this.logger.info('Degit completed successfully', { degitOutput, degitError });
+      } catch (degitFailed) {
+        this.logger.warn('Degit failed, falling back to create-vite', { error: degitFailed.message });
+        
+        // Fallback to create-vite approach
+        let setupCommand;
+        if (framework === 'react') {
+          setupCommand = 'bunx create-vite@latest . --template react --yes';
+        } else if (framework === 'vue') {
+          setupCommand = 'bunx create-vue@latest . --yes';
+        } else if (framework === 'next') {
+          setupCommand = 'bunx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --yes';
+        } else {
+          setupCommand = 'bunx create-vite@latest . --template react --yes';
+        }
+        
+        const result = await execAsync(setupCommand);
+        degitOutput = result.stdout;
+        degitError = result.stderr;
+        this.logger.info('Create-vite fallback completed', { degitOutput, degitError });
+      }
+      
+      // Check if package.json exists
+      const packageJsonPath = path.join(workspacePath, 'package.json');
+      const packageJsonExists = await fs.access(packageJsonPath).then(() => true).catch(() => false);
+      
+      if (!packageJsonExists) {
+        throw new Error(`Package.json not found after project creation. Both degit and create-vite failed.`);
+      }
       
       // Install dependencies with bun
       const { stdout: installOutput, stderr: installError } = await execAsync('bun install');
       
+      this.logger.info('Dependencies installed', { installOutput, installError });
+      
       // Update package.json to expose port for iframe
-      const packageJsonPath = path.join(workspacePath, 'package.json');
       const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
       
       // Update dev script to expose port
