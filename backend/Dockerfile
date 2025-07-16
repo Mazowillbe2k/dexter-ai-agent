@@ -46,7 +46,7 @@ COPY package*.json ./
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ENV NODE_ENV=production
-RUN npm ci --only=production --no-audit --no-fund --prefer-offline
+RUN npm install --only=production --no-audit --no-fund
 
 # Copy source code
 COPY . .
