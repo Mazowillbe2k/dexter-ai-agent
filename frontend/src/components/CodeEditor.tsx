@@ -36,6 +36,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [originalFileContents, setOriginalFileContents] = useState<Map<string, string>>(new Map());
+  const [showDiff, setShowDiff] = useState(false);
 
   const toggleFolder = (path: string) => {
     const newExpanded = new Set(expandedFolders);
@@ -71,6 +73,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         try {
           const content = await onLoadFromBackend(selectedFile);
           if (content) {
+            // Store original content for diff comparison
+            setOriginalFileContents(prev => new Map(prev.set(selectedFile, content)));
             onFileChange(selectedFile, content);
           }
         } catch (error) {
@@ -83,15 +87,28 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   }, [selectedFile, onLoadFromBackend]);
 
   const renderFileTree = (nodes: FileNode[], level = 0) => {
-    return nodes
-      .filter(node => 
-        !searchTerm || 
-        node.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        node.path.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      .map(node => (
-        <div key={generateFileKey(node.path)} style={{ paddingLeft: `${level * 16}px` }}>
-          {node.type === 'directory' ? (
+    // Separate folders and files
+    const folders = nodes.filter(node => node.type === 'directory');
+    const files = nodes.filter(node => node.type === 'file');
+    
+    // Sort folders and files alphabetically
+    const sortedFolders = folders.sort((a, b) => a.name.localeCompare(b.name));
+    const sortedFiles = files.sort((a, b) => a.name.localeCompare(b.name));
+    
+    // Filter based on search term
+    const filterNode = (node: FileNode) => 
+      !searchTerm || 
+      node.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      node.path.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const filteredFolders = sortedFolders.filter(filterNode);
+    const filteredFiles = sortedFiles.filter(filterNode);
+    
+    return (
+      <>
+        {/* Render folders first */}
+        {filteredFolders.map(node => (
+          <div key={generateFileKey(node.path)} style={{ paddingLeft: `${level * 16}px` }}>
             <div className="file-tree-item directory">
               <button
                 className="folder-toggle"
@@ -106,17 +123,25 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
                 </div>
               )}
             </div>
-          ) : (
+          </div>
+        ))}
+        
+        {/* Render files after folders */}
+        {filteredFiles.map(node => (
+          <div key={generateFileKey(node.path)} style={{ paddingLeft: `${level * 16}px` }}>
             <div 
-              className={`file-tree-item file ${selectedFile === node.path ? 'selected' : ''}`}
+              className={`file-tree-item file ${selectedFile === node.path ? 'selected' : ''} ${isFileModified(node.path) ? 'modified' : ''}`}
               onClick={() => onFileSelect(node.path)}
             >
-              <span className="file-icon">📄</span>
+              <span className="file-icon">
+                {isFileModified(node.path) ? '📝' : '📄'}
+              </span>
               <span className="file-name">{node.name}</span>
             </div>
-          )}
-        </div>
-      ));
+          </div>
+        ))}
+      </>
+    );
   };
 
   const getFileContent = (path: string): string => {
@@ -133,6 +158,12 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
     const file = findFile(files);
     return file?.content || '';
+  };
+
+  const isFileModified = (path: string): boolean => {
+    const originalContent = originalFileContents.get(path);
+    const currentContent = getFileContent(path);
+    return originalContent !== undefined && originalContent !== currentContent;
   };
 
   const getLanguageFromPath = (path: string): string => {
@@ -192,29 +223,93 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       <div className="editor-main">
         {selectedFile ? (
           <div className="editor-main-content">
+            <div className="editor-header">
+              <div className="file-info">
+                <span className="file-name">{selectedFile.split('/').pop()}</span>
+                {isFileModified(selectedFile) && (
+                  <span className="modified-indicator">● Modified</span>
+                )}
+              </div>
+              <div className="editor-controls">
+                {isFileModified(selectedFile) && (
+                  <button 
+                    className="diff-toggle-btn"
+                    onClick={() => setShowDiff(!showDiff)}
+                  >
+                    {showDiff ? '📄' : '📊'} {showDiff ? 'Hide Diff' : 'Show Diff'}
+                  </button>
+                )}
+              </div>
+            </div>
+            
             {isSaving && (
               <div className="save-indicator">
                 <span className="save-spinner"></span>
                 Saving...
               </div>
             )}
-            <Editor
-              height="100%"
-              defaultLanguage={getLanguageFromPath(selectedFile)}
-              value={getFileContent(selectedFile)}
-              onChange={(value) => handleFileContentChange(selectedFile, value || '')}
-              options={{
-                minimap: { enabled: true },
-                fontSize: 14,
-                fontFamily: 'JetBrains Mono, Consolas, monospace',
-                lineNumbers: 'on',
-                roundedSelection: false,
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                wordWrap: 'on',
-                theme: 'vs-dark'
-              }}
-            />
+            
+            {showDiff && isFileModified(selectedFile) ? (
+              <div className="diff-view">
+                <div className="diff-header">
+                  <span>Original</span>
+                  <span>Modified</span>
+                </div>
+                <div className="diff-content">
+                  <Editor
+                    height="50%"
+                    defaultLanguage={getLanguageFromPath(selectedFile)}
+                    value={originalFileContents.get(selectedFile) || ''}
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      fontSize: 14,
+                      fontFamily: 'JetBrains Mono, Consolas, monospace',
+                      lineNumbers: 'on',
+                      theme: 'vs-dark',
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      wordWrap: 'on'
+                    }}
+                  />
+                  <Editor
+                    height="50%"
+                    defaultLanguage={getLanguageFromPath(selectedFile)}
+                    value={getFileContent(selectedFile)}
+                    onChange={(value) => handleFileContentChange(selectedFile, value || '')}
+                    options={{
+                      minimap: { enabled: false },
+                      fontSize: 14,
+                      fontFamily: 'JetBrains Mono, Consolas, monospace',
+                      lineNumbers: 'on',
+                      roundedSelection: false,
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      wordWrap: 'on',
+                      theme: 'vs-dark'
+                    }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <Editor
+                height="100%"
+                defaultLanguage={getLanguageFromPath(selectedFile)}
+                value={getFileContent(selectedFile)}
+                onChange={(value) => handleFileContentChange(selectedFile, value || '')}
+                options={{
+                  minimap: { enabled: true },
+                  fontSize: 14,
+                  fontFamily: 'JetBrains Mono, Consolas, monospace',
+                  lineNumbers: 'on',
+                  roundedSelection: false,
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  wordWrap: 'on',
+                  theme: 'vs-dark'
+                }}
+              />
+            )}
           </div>
         ) : (
           <div className="editor-placeholder">

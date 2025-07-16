@@ -552,8 +552,8 @@ class ToolsService {
       const versionDir = `versions/${versionNumber || Date.now()}`;
       await fs.mkdir(versionDir, { recursive: true });
       
-      // Copy current project to version directory
-      const { stdout: copyOutput } = await execAsync(`cp -r . ${versionDir}/`);
+      // Copy current project to version directory, excluding versions and other unnecessary files
+      const { stdout: copyOutput } = await execAsync(`tar --exclude='versions' --exclude='node_modules' --exclude='.git' --exclude='dist' --exclude='build' --exclude='.next' --exclude='.cache' -czf - . | tar -C ${versionDir} -xzf -`);
       
       // Create version metadata
       const versionMetadata = {

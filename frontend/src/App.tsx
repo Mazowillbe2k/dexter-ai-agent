@@ -67,97 +67,9 @@ function App() {
     scrollToBottom()
   }, [messages])
 
-  // Initialize sample files for demo
+  // Initialize with empty files - will be populated when project is selected
   useEffect(() => {
-    const sampleFiles: FileNode[] = [
-      {
-        name: 'src',
-        path: 'src',
-        type: 'directory',
-        children: [
-          {
-            name: 'App.tsx',
-            path: 'src/App.tsx',
-            type: 'file',
-            content: `import React from 'react';
-import './App.css';
-
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <h1>Welcome to Dexter</h1>
-        <p>Start building your application!</p>
-      </header>
-    </div>
-  );
-}
-
-export default App;`
-          },
-          {
-            name: 'App.css',
-            path: 'src/App.css',
-            type: 'file',
-            content: `.App {
-  text-align: center;
-}
-
-.App-header {
-  background-color: #282c34;
-  padding: 20px;
-  color: white;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}`
-          },
-          {
-            name: 'index.tsx',
-            path: 'src/index.tsx',
-            type: 'file',
-            content: `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
-
-const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
-);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);`
-          }
-        ]
-      },
-      {
-        name: 'package.json',
-        path: 'package.json',
-        type: 'file',
-        content: `{
-  "name": "dexter-app",
-  "version": "0.1.0",
-  "private": true,
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "typescript": "^4.9.5"
-  },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  }
-}`
-      }
-    ];
-    setFiles(sampleFiles);
+    setFiles([]);
   }, []);
 
   const handleFileChange = (path: string, content: string) => {
@@ -468,9 +380,13 @@ root.render(
                     setWorkspaceTab('editor')
                     setAutoSwitchedTab('editor')
                     
-                    // Track the app that was created
+                    // Track the app that was created and sync files
                     if (data.result && data.result.appId) {
                       setCurrentAppId(data.result.appId)
+                      // Sync files from the newly created project
+                      setTimeout(() => {
+                        syncFilesWithBackend(data.result.appId)
+                      }, 1000) // Small delay to ensure project is fully created
                     }
                   }
                   break
@@ -781,6 +697,13 @@ root.render(
                   <div className="current-app-indicator">
                     <span className="app-label">Active App:</span>
                     <span className="app-id">{currentAppId}</span>
+                    <button 
+                      className="sync-files-btn"
+                      onClick={() => syncFilesWithBackend(currentAppId)}
+                      title="Sync files from project"
+                    >
+                      🔄 Sync
+                    </button>
                   </div>
                 )}
                 
