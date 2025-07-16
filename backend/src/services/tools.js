@@ -41,8 +41,8 @@ class ToolsService {
       
       let fullPath;
       if (appId) {
-        // Use app-specific directory
-        const workspacePath = process.env.WORKSPACE_PATH || '/workspace';
+        // Use app-specific directory - for app containers, use /app
+        const workspacePath = process.env.WORKSPACE_PATH || '/app';
         fullPath = path.resolve(path.join(workspacePath, appId, relativeFilePath));
       } else {
         // Use current directory
@@ -79,8 +79,8 @@ class ToolsService {
       
       let fullPath;
       if (appId) {
-        // Use app-specific directory
-        const workspacePath = process.env.WORKSPACE_PATH || '/workspace';
+        // Use app-specific directory - for app containers, use /app
+        const workspacePath = process.env.WORKSPACE_PATH || '/app';
         fullPath = path.resolve(path.join(workspacePath, appId, relativeFilePath));
       } else {
         // Use current directory
@@ -117,7 +117,8 @@ class ToolsService {
       // If appId is specified, use app-specific directory
       let workingDirectory = projectDirectory;
       if (appId) {
-        const workspacePath = process.env.WORKSPACE_PATH || '/workspace';
+        // Use /app for app containers
+        const workspacePath = process.env.WORKSPACE_PATH || '/app';
         workingDirectory = path.join(workspacePath, appId);
       }
       
@@ -186,8 +187,8 @@ class ToolsService {
       
       let fullPath;
       if (appId) {
-        // Use app-specific directory
-        const workspacePath = process.env.WORKSPACE_PATH || '/workspace';
+        // Use app-specific directory - for app containers, use /app
+        const workspacePath = process.env.WORKSPACE_PATH || '/app';
         fullPath = path.resolve(path.join(workspacePath, appId, relativeDirPath));
       } else {
         // Use current directory
@@ -416,8 +417,8 @@ class ToolsService {
     try {
       this.logger.info('Starting up AI agent system', { framework, projectName, config });
       
-      // Create project directory
-      const workspacePath = `/home/project/${projectName}`;
+      // Create project directory - use /app for container compatibility
+      const workspacePath = `/app/${projectName}`;
       await fs.mkdir(workspacePath, { recursive: true });
       
       // Check if project already exists and has package.json
