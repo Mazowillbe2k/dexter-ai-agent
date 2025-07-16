@@ -326,21 +326,23 @@ class ToolsService {
       const originalCwd = process.cwd();
       process.chdir(workspacePath);
       
-      let setupCommand;
+      let templateUrl;
       if (framework === 'react') {
-        // Create React project with Vite using bun
-        setupCommand = 'bunx create-vite@latest . --template react --yes';
+        // React + Vite template
+        templateUrl = 'degit:vitejs/vite/packages/create-vite/templates/react';
       } else if (framework === 'vue') {
-        setupCommand = 'bunx create-vue@latest . --yes';
+        // Vue + Vite template
+        templateUrl = 'degit:vitejs/vite/packages/create-vite/templates/vue';
       } else if (framework === 'next') {
-        setupCommand = 'bunx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --yes';
+        // Next.js template
+        templateUrl = 'degit:vercel/next.js/examples/hello-world';
       } else {
         // Default to React
-        setupCommand = 'bunx create-vite@latest . --template react --yes';
+        templateUrl = 'degit:vitejs/vite/packages/create-vite/templates/react';
       }
       
-      // Execute setup command
-      const { stdout, stderr } = await execAsync(setupCommand);
+      // Use degit to create project template
+      const { stdout: degitOutput, stderr: degitError } = await execAsync(`bunx degit ${templateUrl} . --force`);
       
       // Install dependencies with bun
       const { stdout: installOutput, stderr: installError } = await execAsync('bun install');
@@ -367,10 +369,10 @@ class ToolsService {
         framework,
         projectName,
         workspacePath,
-        stdout: stdout + installOutput,
-        stderr: stderr + installError,
+        stdout: degitOutput + installOutput,
+        stderr: degitError + installError,
         status: 'started',
-        message: `${framework} project '${projectName}' created successfully`,
+        message: `${framework} project '${projectName}' created successfully using degit`,
         appId: projectName
       };
     } catch (error) {
