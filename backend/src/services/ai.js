@@ -227,13 +227,33 @@ NEVER create files unless they're absolutely necessary for achieving your goal.
 ALWAYS prefer editing an existing file to creating a new one.
 NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 
+## Tool Usage Instructions
+When you need to use tools, use them in this exact format:
+
+For file operations:
+- To create a file: createFile("path/to/file", "content")
+- To edit a file: editFile("path/to/file", "instructions", "new content")
+- To read a file: readFile("path/to/file")
+
+For project setup:
+- To start a new project: startup("framework", "project-name")
+
+For terminal commands:
+- To run commands: bash("command")
+
+For example, if you want to create a React todo app:
+1. Use startup("react", "todo-app") to create the project
+2. Use editFile("src/App.jsx", "Create todo app component", "import React...") to create the main component
+3. Use bash("npm install") to install dependencies
+4. Use bash("npm start") to start the development server
+
 Answer the user's request using the relevant tool(s), if they are available. Check that all the required parameters for each tool call are provided or can reasonably be inferred from context. IF there are no relevant tools or there are missing values for required parameters, ask the user to supply these values; otherwise proceed with the tool calls. If the user provides a specific value for a parameter (for example provided in quotes), make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters. Carefully analyze descriptive terms in the request as they may indicate required parameter values that should be included even if not explicitly quoted.
 
 Take pride in what you are building with the USER.`;
       
       if (tools.length > 0) {
         systemMessage += '\n\nAvailable tools:\n' + tools.map(tool => 
-          `- ${tool.name}: ${tool.description}`
+          `- ${tool}: Use ${tool}() to execute this tool`
         ).join('\n');
       }
 
@@ -311,32 +331,36 @@ Take pride in what you are building with the USER.`;
     // This is a more sophisticated parser that can handle various tool call formats
     
     // Look for startup tool calls
-    if (response.includes('startup') && availableTools.includes('startup')) {
-      const startupMatch = response.match(/startup\(['"]([^'"]+)['"]\)/);
-      if (startupMatch) {
+    if (response.includes('startup(') && availableTools.includes('startup')) {
+      const startupMatches = response.matchAll(/startup\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]\)/g);
+      for (const match of startupMatches) {
         tools.push({
           name: 'startup',
-          parameters: { description: startupMatch[1] }
+          parameters: { 
+            framework: match[1],
+            projectName: match[2]
+          }
         });
       }
     }
     
     // Look for editFile tool calls
-    if (response.includes('editFile') && availableTools.includes('editFile')) {
-      const editFileMatches = response.matchAll(/editFile\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]\)/g);
+    if (response.includes('editFile(') && availableTools.includes('editFile')) {
+      const editFileMatches = response.matchAll(/editFile\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"],\s*['"]([^'"]+)['"]\)/g);
       for (const match of editFileMatches) {
         tools.push({
           name: 'editFile',
           parameters: {
             targetFile: match[1],
-            content: match[2]
+            instructions: match[2],
+            content: match[3]
           }
         });
       }
     }
     
     // Look for createFile tool calls
-    if (response.includes('createFile') && availableTools.includes('createFile')) {
+    if (response.includes('createFile(') && availableTools.includes('createFile')) {
       const createFileMatches = response.matchAll(/createFile\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]\)/g);
       for (const match of createFileMatches) {
         tools.push({
@@ -350,7 +374,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for bash tool calls
-    if (response.includes('bash') && availableTools.includes('bash')) {
+    if (response.includes('bash(') && availableTools.includes('bash')) {
       const bashMatches = response.matchAll(/bash\(['"]([^'"]+)['"]\)/g);
       for (const match of bashMatches) {
         tools.push({
@@ -363,7 +387,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for readFile tool calls
-    if (response.includes('readFile') && availableTools.includes('readFile')) {
+    if (response.includes('readFile(') && availableTools.includes('readFile')) {
       const readFileMatches = response.matchAll(/readFile\(['"]([^'"]+)['"]\)/g);
       for (const match of readFileMatches) {
         tools.push({
@@ -376,7 +400,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for ls tool calls
-    if (response.includes('ls') && availableTools.includes('ls')) {
+    if (response.includes('ls(') && availableTools.includes('ls')) {
       const lsMatch = response.match(/ls\(['"]([^'"]+)['"]\)/);
       if (lsMatch) {
         tools.push({
@@ -389,7 +413,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for grep tool calls
-    if (response.includes('grep') && availableTools.includes('grep')) {
+    if (response.includes('grep(') && availableTools.includes('grep')) {
       const grepMatches = response.matchAll(/grep\(['"]([^'"]+)['"]\)/g);
       for (const match of grepMatches) {
         tools.push({
@@ -402,7 +426,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for deleteFile tool calls
-    if (response.includes('deleteFile') && availableTools.includes('deleteFile')) {
+    if (response.includes('deleteFile(') && availableTools.includes('deleteFile')) {
       const deleteFileMatches = response.matchAll(/deleteFile\(['"]([^'"]+)['"]\)/g);
       for (const match of deleteFileMatches) {
         tools.push({
@@ -415,7 +439,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for webSearch tool calls
-    if (response.includes('webSearch') && availableTools.includes('webSearch')) {
+    if (response.includes('webSearch(') && availableTools.includes('webSearch')) {
       const webSearchMatches = response.matchAll(/webSearch\(['"]([^'"]+)['"]\)/g);
       for (const match of webSearchMatches) {
         tools.push({
@@ -428,7 +452,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for webScrape tool calls
-    if (response.includes('webScrape') && availableTools.includes('webScrape')) {
+    if (response.includes('webScrape(') && availableTools.includes('webScrape')) {
       const webScrapeMatches = response.matchAll(/webScrape\(['"]([^'"]+)['"]\)/g);
       for (const match of webScrapeMatches) {
         tools.push({
@@ -441,7 +465,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for taskAgent tool calls
-    if (response.includes('taskAgent') && availableTools.includes('taskAgent')) {
+    if (response.includes('taskAgent(') && availableTools.includes('taskAgent')) {
       const taskAgentMatches = response.matchAll(/taskAgent\(['"]([^'"]+)['"]\)/g);
       for (const match of taskAgentMatches) {
         tools.push({
@@ -454,7 +478,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for runLinter tool calls
-    if (response.includes('runLinter') && availableTools.includes('runLinter')) {
+    if (response.includes('runLinter(') && availableTools.includes('runLinter')) {
       const runLinterMatches = response.matchAll(/runLinter\(['"]([^'"]+)['"]\)/g);
       for (const match of runLinterMatches) {
         tools.push({
@@ -467,7 +491,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for versioning tool calls
-    if (response.includes('versioning') && availableTools.includes('versioning')) {
+    if (response.includes('versioning(') && availableTools.includes('versioning')) {
       const versioningMatches = response.matchAll(/versioning\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]\)/g);
       for (const match of versioningMatches) {
         tools.push({
@@ -481,7 +505,7 @@ Take pride in what you are building with the USER.`;
     }
     
     // Look for deploy tool calls
-    if (response.includes('deploy') && availableTools.includes('deploy')) {
+    if (response.includes('deploy(') && availableTools.includes('deploy')) {
       const deployMatch = response.match(/deploy\(([^)]+)\)/);
       if (deployMatch) {
         tools.push({

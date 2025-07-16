@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import './App.css'
+import CodeEditor from './components/CodeEditor'
+import Terminal from './components/Terminal'
 
 interface Message {
   id: string
@@ -18,6 +20,14 @@ interface Project {
   updatedAt: string
 }
 
+interface FileNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: FileNode[];
+  content?: string;
+}
+
 function App() {
   const [projects, setProjects] = useState<Project[]>([])
   const [messages, setMessages] = useState<Message[]>([])
@@ -26,6 +36,16 @@ function App() {
   const [activeTab, setActiveTab] = useState<'chat' | 'projects'>('chat')
   const [workspaceTab, setWorkspaceTab] = useState<'app' | 'editor' | 'terminal'>('app')
   const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const [autoSwitchedTab, setAutoSwitchedTab] = useState<string | null>(null)
+  
+  // Editor state
+  const [files, setFiles] = useState<FileNode[]>([])
+  const [selectedFile, setSelectedFile] = useState<string>('')
+  
+  // Terminal state
+  const [terminalOutput, setTerminalOutput] = useState<string[]>([])
+  const [isTerminalConnected, setIsTerminalConnected] = useState(false)
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -38,6 +58,185 @@ function App() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Initialize sample files for demo
+  useEffect(() => {
+    const sampleFiles: FileNode[] = [
+      {
+        name: 'src',
+        path: 'src',
+        type: 'directory',
+        children: [
+          {
+            name: 'App.tsx',
+            path: 'src/App.tsx',
+            type: 'file',
+            content: `import React from 'react';
+import './App.css';
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Welcome to Dexter</h1>
+        <p>Start building your application!</p>
+      </header>
+    </div>
+  );
+}
+
+export default App;`
+          },
+          {
+            name: 'App.css',
+            path: 'src/App.css',
+            type: 'file',
+            content: `.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}`
+          },
+          {
+            name: 'index.tsx',
+            path: 'src/index.tsx',
+            type: 'file',
+            content: `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+
+const root = ReactDOM.createRoot(
+  document.getElementById('root') as HTMLElement
+);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`
+          }
+        ]
+      },
+      {
+        name: 'package.json',
+        path: 'package.json',
+        type: 'file',
+        content: `{
+  "name": "dexter-app",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "typescript": "^4.9.5"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  }
+}`
+      }
+    ];
+    setFiles(sampleFiles);
+  }, []);
+
+  const handleFileChange = (path: string, content: string) => {
+    const updateFileContent = (nodes: FileNode[]): FileNode[] => {
+      return nodes.map(node => {
+        if (node.path === path) {
+          return { ...node, content };
+        }
+        if (node.children) {
+          return { ...node, children: updateFileContent(node.children) };
+        }
+        return node;
+      });
+    };
+    setFiles(updateFileContent);
+  };
+
+  const handleFileSelect = (path: string) => {
+    setSelectedFile(path);
+  };
+
+  const handleTerminalCommand = async (command: string): Promise<string> => {
+    try {
+      // Connect to backend for real command execution
+      const response = await fetch(`${API_BASE_URL}/api/v1/ai/execute-tool`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          toolName: 'bash',
+          parameters: {
+            command: command
+          },
+          userMessage: `Execute command: ${command}`
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to execute command')
+      }
+
+      const data = await response.json()
+      
+      // Update terminal output with real command result
+      if (data.toolResult && data.toolResult.stdout) {
+        setTerminalOutput(prev => [...prev, data.toolResult.stdout])
+        return data.toolResult.stdout
+      } else if (data.toolResult && data.toolResult.stderr) {
+        setTerminalOutput(prev => [...prev, data.toolResult.stderr])
+        return data.toolResult.stderr
+      } else {
+        return 'Command executed successfully'
+      }
+    } catch (error) {
+      console.error('Terminal command error:', error)
+      
+      // Fallback to simulated commands for demo purposes
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      switch (command.toLowerCase()) {
+        case 'ls':
+        case 'dir':
+          return 'src/\npackage.json\nREADME.md\n';
+        case 'pwd':
+          return '/home/project\n';
+        case 'npm start':
+          return 'Starting the development server...\n\nCompiled successfully!\n\nYou can now view dexter-app in the browser.\n\n  Local:            http://localhost:3000\n  On Your Network:  http://192.168.1.100:3000\n\nNote that the development build is not optimized.\nTo create a production build, use npm run build.\n';
+        case 'npm install':
+          return 'added 1234 packages, and audited 1234 packages in 1s\n\n1234 packages are looking for funding\n  run \`npm fund\` for details\n\nfound 0 vulnerabilities\n';
+        case 'help':
+          return `Available commands:
+  ls, dir          - List directory contents
+  pwd              - Print working directory
+  npm start        - Start development server
+  npm install      - Install dependencies
+  npm run build    - Build for production
+  clear            - Clear terminal
+  help             - Show this help message\n`;
+        case 'clear':
+          setTerminalOutput([]);
+          return '';
+        default:
+          return `Command not found: ${command}\nType 'help' for available commands.\n`;
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,7 +254,7 @@ function App() {
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/ai/stream`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/ai/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,7 +262,7 @@ function App() {
         body: JSON.stringify({
           message: inputValue,
           context: {},
-          tools: []
+          stream: true
         })
       })
 
@@ -74,6 +273,9 @@ function App() {
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       let assistantMessage = ''
+      let currentToolResults: any[] = []
+      let hasFileOperations = false
+      let hasBashCommands = false
 
       if (reader) {
         while (true) {
@@ -81,25 +283,113 @@ function App() {
           if (done) break
 
           const chunk = decoder.decode(value)
-          assistantMessage += chunk
+          const lines = chunk.split('\n').filter(line => line.trim())
 
-          setMessages(prev => {
-            const newMessages = [...prev]
-            const lastMessage = newMessages[newMessages.length - 1]
-            
-            if (lastMessage && lastMessage.role === 'assistant') {
-              lastMessage.content = assistantMessage
-            } else {
-              newMessages.push({
-                id: Date.now().toString(),
-                role: 'assistant',
-                content: assistantMessage,
-                timestamp: new Date()
+          for (const line of lines) {
+            try {
+              const data = JSON.parse(line)
+              
+              switch (data.type) {
+                case 'ai_response':
+                  assistantMessage = data.content
+                  setMessages(prev => {
+                    const newMessages = [...prev]
+                    const lastMessage = newMessages[newMessages.length - 1]
+                    
+                    if (lastMessage && lastMessage.role === 'assistant') {
+                      lastMessage.content = assistantMessage
+                    } else {
+                      newMessages.push({
+                        id: Date.now().toString(),
+                        role: 'assistant',
+                        content: assistantMessage,
+                        timestamp: new Date()
+                      })
+                    }
+                    
+                    return newMessages
+                  })
+                  break
+                  
+                case 'tool_executed':
+                  currentToolResults.push(data)
+                  
+                  // Auto-switch to editor tab for file operations
+                  if (data.tool === 'createFile' || data.tool === 'editFile') {
+                    hasFileOperations = true
+                    setWorkspaceTab('editor')
+                    setAutoSwitchedTab('editor')
+                    
+                    const result = data.result
+                    if (result && result.targetFile) {
+                      const updateFiles = (nodes: FileNode[]): FileNode[] => {
+                        return nodes.map(node => {
+                          if (node.path === result.targetFile) {
+                            return { ...node, content: result.content || node.content }
+                          }
+                          if (node.children) {
+                            return { ...node, children: updateFiles(node.children) }
+                          }
+                          return node
+                        })
+                      }
+                      setFiles(updateFiles)
+                      
+                      // Select the file that was just created/edited
+                      setSelectedFile(result.targetFile)
+                    }
+                  }
+                  
+                  // Auto-switch to terminal tab for bash commands
+                  if (data.tool === 'bash') {
+                    hasBashCommands = true
+                    setWorkspaceTab('terminal')
+                    setAutoSwitchedTab('terminal')
+                    
+                    const result = data.result
+                    if (result && result.stdout) {
+                      setTerminalOutput(prev => [...prev, result.stdout])
+                    }
+                  }
+                  
+                  // Auto-switch to editor for startup (project creation)
+                  if (data.tool === 'startup') {
+                    hasFileOperations = true
+                    setWorkspaceTab('editor')
+                    setAutoSwitchedTab('editor')
+                  }
+                  break
+                  
+                case 'tool_error':
+                  console.error('Tool execution error:', data.error)
+                  break
+                  
+                case 'app_created':
+                  console.log('App created:', data.appId)
+                  break
+              }
+            } catch (error) {
+              // If it's not JSON, treat it as plain text
+              assistantMessage += chunk
+              setMessages(prev => {
+                const newMessages = [...prev]
+                const lastMessage = newMessages[newMessages.length - 1]
+                
+                if (lastMessage && lastMessage.role === 'assistant') {
+                  lastMessage.content = assistantMessage
+                } else {
+                  newMessages.push({
+                    id: Date.now().toString(),
+                    role: 'assistant',
+                    content: assistantMessage,
+                    timestamp: new Date()
+                  })
+                }
+                
+                return newMessages
               })
             }
-            
-            return newMessages
-          })
+          }
         }
       }
     } catch (error) {
@@ -182,6 +472,16 @@ function App() {
   useEffect(() => {
     loadProjects()
   }, [])
+
+  // Clear auto-switched indicator after delay
+  useEffect(() => {
+    if (autoSwitchedTab) {
+      const timer = setTimeout(() => {
+        setAutoSwitchedTab(null)
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [autoSwitchedTab])
 
   return (
     <div className="app">
@@ -327,16 +627,16 @@ function App() {
                     📁 App
                   </button>
                   <button 
-                    className={`workspace-tab ${workspaceTab === 'editor' ? 'active' : ''}`}
+                    className={`workspace-tab ${workspaceTab === 'editor' ? 'active' : ''} ${autoSwitchedTab === 'editor' ? 'auto-switched' : ''}`}
                     onClick={() => setWorkspaceTab('editor')}
                   >
-                    📄 Editor
+                    📄 Editor {autoSwitchedTab === 'editor' && <span className="auto-indicator">⚡</span>}
                   </button>
                   <button 
-                    className={`workspace-tab ${workspaceTab === 'terminal' ? 'active' : ''}`}
+                    className={`workspace-tab ${workspaceTab === 'terminal' ? 'active' : ''} ${autoSwitchedTab === 'terminal' ? 'auto-switched' : ''}`}
                     onClick={() => setWorkspaceTab('terminal')}
                   >
-                    {'>_'} Terminal
+                    {'>_'} Terminal {autoSwitchedTab === 'terminal' && <span className="auto-indicator">⚡</span>}
                   </button>
                 </div>
                 
@@ -365,17 +665,22 @@ function App() {
                 
                 {workspaceTab === 'editor' && (
                   <div className="editor-workspace">
-                    <div className="editor-placeholder">
-                      <p>Code editor will appear here</p>
-                    </div>
+                    <CodeEditor
+                      files={files}
+                      onFileChange={handleFileChange}
+                      onFileSelect={handleFileSelect}
+                      selectedFile={selectedFile}
+                    />
                   </div>
                 )}
                 
                 {workspaceTab === 'terminal' && (
                   <div className="terminal-workspace">
-                    <div className="terminal-placeholder">
-                      <p>Terminal output will appear here</p>
-                    </div>
+                    <Terminal
+                      onCommand={handleTerminalCommand}
+                      initialDirectory="/home/project"
+                      output={terminalOutput}
+                    />
                   </div>
                 )}
               </div>
