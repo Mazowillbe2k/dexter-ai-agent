@@ -1,4 +1,4 @@
-# Use Ubuntu with Node.js 18
+# Use Ubuntu with Node.js 20
 FROM ubuntu:22.04
 
 # Update package list and install Node.js, npm, and essential dependencies
@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     # SSL certificates
     ca-certificates \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
