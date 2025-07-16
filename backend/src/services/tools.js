@@ -322,6 +322,24 @@ class ToolsService {
       const workspacePath = `/home/project/${projectName}`;
       await fs.mkdir(workspacePath, { recursive: true });
       
+      // Check if project already exists and has package.json
+      const existingPackageJsonPath = path.join(workspacePath, 'package.json');
+      const projectExists = await fs.access(existingPackageJsonPath).then(() => true).catch(() => false);
+      
+      if (projectExists) {
+        this.logger.info('Project already exists, skipping creation', { projectName, workspacePath });
+        return {
+          framework,
+          projectName,
+          workspacePath,
+          stdout: 'Project already exists',
+          stderr: '',
+          status: 'exists',
+          message: `${framework} project '${projectName}' already exists`,
+          appId: projectName
+        };
+      }
+      
       // Change to project directory
       const originalCwd = process.cwd();
       process.chdir(workspacePath);
