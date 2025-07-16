@@ -212,7 +212,31 @@ class ToolsService {
       
       const items = await fs.readdir(fullPath, { withFileTypes: true });
       
-      const contents = items.map(item => ({
+      // Filter out unnecessary directories and files
+      const filteredItems = items.filter(item => {
+        // Skip node_modules, .git, dist, build, .next, .cache directories
+        if (item.isDirectory()) {
+          const skipDirs = ['node_modules', '.git', 'dist', 'build', '.next', '.cache', '.vscode', '.idea'];
+          if (skipDirs.includes(item.name)) {
+            return false;
+          }
+        }
+        
+        // Skip hidden files and common build artifacts
+        if (item.name.startsWith('.') && item.name !== '.env' && item.name !== '.env.local') {
+          return false;
+        }
+        
+        // Skip common build artifacts
+        const skipFiles = ['package-lock.json', 'yarn.lock', '.DS_Store', 'Thumbs.db'];
+        if (skipFiles.includes(item.name)) {
+          return false;
+        }
+        
+        return true;
+      });
+      
+      const contents = filteredItems.map(item => ({
         name: item.name,
         type: item.isDirectory() ? 'directory' : 'file',
         path: path.join(relativeDirPath, item.name)
@@ -222,7 +246,8 @@ class ToolsService {
         path: relativeDirPath,
         contents,
         total: contents.length,
-        appId
+        appId,
+        message: `Showing ${contents.length} items (filtered)`
       };
     } catch (error) {
       this.logger.error('Directory listing failed', { relativeDirPath, appId, error: error.message });

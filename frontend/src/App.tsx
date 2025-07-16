@@ -466,6 +466,13 @@ function App() {
                   
                 case 'tool_error':
                   console.error('Tool execution error:', data.error)
+                  // Add error message to chat for AI to see and fix
+                  setMessages(prev => [...prev, {
+                    id: generateMessageId(),
+                    role: 'assistant',
+                    content: `❌ **Tool Error**: ${data.tool} failed with error: ${data.error}\n\nI need to fix this error immediately.`,
+                    timestamp: new Date()
+                  }])
                   break
                   
                 case 'app_created':
