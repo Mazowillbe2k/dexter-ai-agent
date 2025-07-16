@@ -27,8 +27,15 @@ const AppPreview: React.FC<AppPreviewProps> = ({ appId, className = '' }) => {
 
         const response = await fetch(`${API_BASE_URL}/api/v1/apps/${appId}/status`);
         
+        if (response.status === 429) {
+          // Rate limited - retry after a delay
+          setError('Rate limited. Retrying in 5 seconds...');
+          setTimeout(() => getAppStatus(), 5000);
+          return;
+        }
+        
         if (!response.ok) {
-          throw new Error('Failed to get app status');
+          throw new Error(`Failed to get app status: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();

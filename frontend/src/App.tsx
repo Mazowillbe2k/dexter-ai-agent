@@ -44,6 +44,8 @@ function App() {
   const [activeTab, setActiveTab] = useState<'chat' | 'projects'>('chat')
   const [workspaceTab, setWorkspaceTab] = useState<'app' | 'editor' | 'terminal'>('app')
   const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false)
+  const [projectsError, setProjectsError] = useState<string | null>(null)
   const [autoSwitchedTab, setAutoSwitchedTab] = useState<string | null>(null)
   
   // Editor state
@@ -54,6 +56,7 @@ function App() {
   const [terminalOutput, setTerminalOutput] = useState<string[]>([])
   const [isTerminalConnected, setIsTerminalConnected] = useState(false)
   const [currentAppId, setCurrentAppId] = useState<string>('')
+  const [sessionAppId, setSessionAppId] = useState<string>('')
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -117,16 +120,31 @@ function App() {
         })
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        if (data.toolResult && data.toolResult.contents) {
-          // Convert backend file structure to frontend format
-          const backendFiles = await convertBackendFilesToFrontend(data.toolResult.contents, targetAppId)
-          setFiles(backendFiles)
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log('App not found yet, will retry later')
+          return
         }
+        throw new Error(`Failed to sync files: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      if (data.toolResult && data.toolResult.contents) {
+        // Convert backend file structure to frontend format
+        const backendFiles = await convertBackendFilesToFrontend(data.toolResult.contents, targetAppId)
+        setFiles(backendFiles)
+        console.log('Files synced successfully for app:', targetAppId)
+      } else if (data.toolResult && data.toolResult.message === 'Directory not ready yet') {
+        console.log('Directory not ready yet, will retry in 2 seconds')
+        // Retry after a delay
+        setTimeout(() => syncFilesWithBackend(targetAppId), 2000)
       }
     } catch (error) {
       console.error('Error syncing files:', error)
+      // Don't show error to user if app doesn't exist yet
+      if (error instanceof Error && error.message.includes('ENOENT')) {
+        console.log('App directory not ready yet, will retry later')
+      }
     }
   };
 
@@ -312,6 +330,12 @@ function App() {
     e.preventDefault()
     if (!inputValue.trim() || isLoading) return
 
+    // Generate a unique app ID for this session if we don't have one
+    if (!sessionAppId) {
+      const newAppId = `app-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      setSessionAppId(newAppId)
+    }
+
     const userMessage: Message = {
       id: generateMessageId(),
       role: 'user',
@@ -332,7 +356,8 @@ function App() {
         body: JSON.stringify({
           message: inputValue,
           context: {},
-          stream: true
+          stream: true,
+          appId: sessionAppId
         })
       })
 
@@ -431,10 +456,10 @@ function App() {
                     // Track the app that was created and sync files
                     if (data.result && data.result.appId) {
                       setCurrentAppId(data.result.appId)
-                      // Sync files from the newly created project
+                      // Wait a bit longer to ensure the project is fully created before syncing
                       setTimeout(() => {
                         syncFilesWithBackend(data.result.appId)
-                      }, 1000) // Small delay to ensure project is fully created
+                      }, 3000) // Increased delay to ensure project is fully created
                     }
                   }
                   break
@@ -529,7 +554,19 @@ function App() {
 
   const loadProjects = async () => {
     try {
+      setIsLoadingProjects(true)
+      setProjectsError(null)
+      
       const response = await fetch(`${API_BASE_URL}/api/v1/apps`)
+      
+      if (response.status === 429) {
+        // Rate limited - retry after a delay
+        console.log('Rate limited, retrying in 5 seconds...')
+        setProjectsError('Rate limited. Retrying in 5 seconds...')
+        setTimeout(() => loadProjects(), 5000)
+        return
+      }
+      
       if (response.ok) {
         const data = await response.json()
         const projectsData = data.data?.apps?.map((app: any) => ({
@@ -542,9 +579,18 @@ function App() {
           updatedAt: app.createdAt
         })) || []
         setProjects(projectsData)
+        setProjectsError(null)
+      } else {
+        console.error('Failed to load projects:', response.status, response.statusText)
+        setProjectsError(`Failed to load projects: ${response.status} ${response.statusText}`)
       }
     } catch (error) {
       console.error('Error loading projects:', error)
+      setProjectsError('Network error. Retrying in 3 seconds...')
+      // Retry after a delay on network errors
+      setTimeout(() => loadProjects(), 3000)
+    } finally {
+      setIsLoadingProjects(false)
     }
   }
 
@@ -801,7 +847,24 @@ function App() {
             </div>
             
             <div className="projects-grid">
-              {projects.length === 0 ? (
+              {isLoadingProjects ? (
+                <div className="projects-loading">
+                  <div className="loading-spinner"></div>
+                  <p>Loading projects...</p>
+                </div>
+              ) : projectsError ? (
+                <div className="projects-error">
+                  <div className="error-icon">⚠️</div>
+                  <h3>Error Loading Projects</h3>
+                  <p>{projectsError}</p>
+                  <button 
+                    className="retry-btn"
+                    onClick={() => loadProjects()}
+                  >
+                    🔄 Retry
+                  </button>
+                </div>
+              ) : projects.length === 0 ? (
                 <div className="no-projects">
                   <div className="no-projects-icon">📁</div>
                   <h3>No projects yet</h3>

@@ -194,6 +194,21 @@ class ToolsService {
         fullPath = path.resolve(relativeDirPath);
       }
       
+      // Check if directory exists
+      try {
+        await fs.access(fullPath);
+      } catch (accessError) {
+        // Directory doesn't exist yet, return empty result
+        this.logger.info('Directory does not exist yet', { fullPath, appId });
+        return {
+          path: relativeDirPath,
+          contents: [],
+          total: 0,
+          appId,
+          message: 'Directory not ready yet'
+        };
+      }
+      
       const items = await fs.readdir(fullPath, { withFileTypes: true });
       
       const contents = items.map(item => ({
