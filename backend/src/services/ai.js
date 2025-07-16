@@ -303,6 +303,199 @@ Take pride in what you are building with the USER.`;
       throw error;
     }
   }
+
+  extractToolCalls(response, availableTools) {
+    const tools = [];
+    
+    // Enhanced tool extraction that looks for tool usage patterns in the AI response
+    // This is a more sophisticated parser that can handle various tool call formats
+    
+    // Look for startup tool calls
+    if (response.includes('startup') && availableTools.includes('startup')) {
+      const startupMatch = response.match(/startup\(['"]([^'"]+)['"]\)/);
+      if (startupMatch) {
+        tools.push({
+          name: 'startup',
+          parameters: { description: startupMatch[1] }
+        });
+      }
+    }
+    
+    // Look for editFile tool calls
+    if (response.includes('editFile') && availableTools.includes('editFile')) {
+      const editFileMatches = response.matchAll(/editFile\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]\)/g);
+      for (const match of editFileMatches) {
+        tools.push({
+          name: 'editFile',
+          parameters: {
+            targetFile: match[1],
+            content: match[2]
+          }
+        });
+      }
+    }
+    
+    // Look for createFile tool calls
+    if (response.includes('createFile') && availableTools.includes('createFile')) {
+      const createFileMatches = response.matchAll(/createFile\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]\)/g);
+      for (const match of createFileMatches) {
+        tools.push({
+          name: 'createFile',
+          parameters: {
+            targetFile: match[1],
+            content: match[2]
+          }
+        });
+      }
+    }
+    
+    // Look for bash tool calls
+    if (response.includes('bash') && availableTools.includes('bash')) {
+      const bashMatches = response.matchAll(/bash\(['"]([^'"]+)['"]\)/g);
+      for (const match of bashMatches) {
+        tools.push({
+          name: 'bash',
+          parameters: {
+            command: match[1]
+          }
+        });
+      }
+    }
+    
+    // Look for readFile tool calls
+    if (response.includes('readFile') && availableTools.includes('readFile')) {
+      const readFileMatches = response.matchAll(/readFile\(['"]([^'"]+)['"]\)/g);
+      for (const match of readFileMatches) {
+        tools.push({
+          name: 'readFile',
+          parameters: {
+            relativeFilePath: match[1]
+          }
+        });
+      }
+    }
+    
+    // Look for ls tool calls
+    if (response.includes('ls') && availableTools.includes('ls')) {
+      const lsMatch = response.match(/ls\(['"]([^'"]+)['"]\)/);
+      if (lsMatch) {
+        tools.push({
+          name: 'ls',
+          parameters: {
+            relativeDirPath: lsMatch[1]
+          }
+        });
+      }
+    }
+    
+    // Look for grep tool calls
+    if (response.includes('grep') && availableTools.includes('grep')) {
+      const grepMatches = response.matchAll(/grep\(['"]([^'"]+)['"]\)/g);
+      for (const match of grepMatches) {
+        tools.push({
+          name: 'grep',
+          parameters: {
+            query: match[1]
+          }
+        });
+      }
+    }
+    
+    // Look for deleteFile tool calls
+    if (response.includes('deleteFile') && availableTools.includes('deleteFile')) {
+      const deleteFileMatches = response.matchAll(/deleteFile\(['"]([^'"]+)['"]\)/g);
+      for (const match of deleteFileMatches) {
+        tools.push({
+          name: 'deleteFile',
+          parameters: {
+            relativeFilePath: match[1]
+          }
+        });
+      }
+    }
+    
+    // Look for webSearch tool calls
+    if (response.includes('webSearch') && availableTools.includes('webSearch')) {
+      const webSearchMatches = response.matchAll(/webSearch\(['"]([^'"]+)['"]\)/g);
+      for (const match of webSearchMatches) {
+        tools.push({
+          name: 'webSearch',
+          parameters: {
+            searchTerm: match[1]
+          }
+        });
+      }
+    }
+    
+    // Look for webScrape tool calls
+    if (response.includes('webScrape') && availableTools.includes('webScrape')) {
+      const webScrapeMatches = response.matchAll(/webScrape\(['"]([^'"]+)['"]\)/g);
+      for (const match of webScrapeMatches) {
+        tools.push({
+          name: 'webScrape',
+          parameters: {
+            url: match[1]
+          }
+        });
+      }
+    }
+    
+    // Look for taskAgent tool calls
+    if (response.includes('taskAgent') && availableTools.includes('taskAgent')) {
+      const taskAgentMatches = response.matchAll(/taskAgent\(['"]([^'"]+)['"]\)/g);
+      for (const match of taskAgentMatches) {
+        tools.push({
+          name: 'taskAgent',
+          parameters: {
+            task: match[1]
+          }
+        });
+      }
+    }
+    
+    // Look for runLinter tool calls
+    if (response.includes('runLinter') && availableTools.includes('runLinter')) {
+      const runLinterMatches = response.matchAll(/runLinter\(['"]([^'"]+)['"]\)/g);
+      for (const match of runLinterMatches) {
+        tools.push({
+          name: 'runLinter',
+          parameters: {
+            projectDirectory: match[1]
+          }
+        });
+      }
+    }
+    
+    // Look for versioning tool calls
+    if (response.includes('versioning') && availableTools.includes('versioning')) {
+      const versioningMatches = response.matchAll(/versioning\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]\)/g);
+      for (const match of versioningMatches) {
+        tools.push({
+          name: 'versioning',
+          parameters: {
+            projectDirectory: match[1],
+            versionTitle: match[2]
+          }
+        });
+      }
+    }
+    
+    // Look for deploy tool calls
+    if (response.includes('deploy') && availableTools.includes('deploy')) {
+      const deployMatch = response.match(/deploy\(([^)]+)\)/);
+      if (deployMatch) {
+        tools.push({
+          name: 'deploy',
+          parameters: {
+            deployAsStaticSite: true,
+            deployAsDynamicSite: false
+          }
+        });
+      }
+    }
+    
+    return tools;
+  }
 }
 
 module.exports = new AIService(); 

@@ -4,46 +4,100 @@ const { v4: uuidv4 } = require('uuid');
 const aiService = require('../services/ai');
 const toolsService = require('../services/tools');
 
-// AI Agent endpoints
+// Single AI chat endpoint that handles everything
 router.post('/chat', async (req, res) => {
   try {
-    const { message, context, tools, stream = false } = req.body;
+    const { message, context = {}, stream = false, appId } = req.body;
     
     // Generate session ID if not provided
     const sessionId = req.body.sessionId || uuidv4();
     
+    // Get available tools from tools service
+    const availableTools = [
+      'startup',
+      'editFile', 
+      'createFile',
+      'bash',
+      'readFile',
+      'ls',
+      'grep',
+      'fileSearch',
+      'deleteFile',
+      'webSearch',
+      'webScrape',
+      'stringReplace',
+      'taskAgent',
+      'mcpServer',
+      'glob',
+      'runLinter',
+      'versioning',
+      'suggestions',
+      'deploy'
+    ];
+    
     if (stream) {
-      // Set up streaming response
+      // Set up streaming response with JSON lines
       res.setHeader('Content-Type', 'text/plain');
       res.setHeader('Transfer-Encoding', 'chunked');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
       
-      const messages = [
-        {
-          role: 'user',
-          content: message
+      // Create app container if appId is provided
+      if (appId) {
+        const appRuntime = require('../services/appRuntime');
+        try {
+          await appRuntime.createApp(appId, { description: message });
+          res.write(JSON.stringify({ type: 'app_created', appId }) + '\n');
+        } catch (error) {
+          res.write(JSON.stringify({ type: 'error', message: 'Failed to create app container' }) + '\n');
+          return res.end();
         }
-      ];
+      }
       
-      const chatCompletion = await aiService.createChatCompletion(messages, { stream: true });
+      // Process the message with the comprehensive system prompt and tools
+      const response = await aiService.processUserMessage(message, context, availableTools);
       
-      for await (const chunk of chatCompletion) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        if (content) {
-          res.write(content);
+      // Stream the AI response
+      res.write(JSON.stringify({ type: 'ai_response', content: response.message }) + '\n');
+      
+      // Extract and execute tool calls from the AI response
+      const toolCalls = aiService.extractToolCalls(response.message, availableTools);
+      
+      if (toolCalls && toolCalls.length > 0) {
+        for (const tool of toolCalls) {
+          try {
+            const toolResult = await toolsService.executeTool(tool.name, tool.parameters);
+            res.write(JSON.stringify({ 
+              type: 'tool_executed', 
+              tool: tool.name, 
+              parameters: tool.parameters,
+              result: toolResult 
+            }) + '\n');
+          } catch (error) {
+            res.write(JSON.stringify({ 
+              type: 'tool_error', 
+              tool: tool.name, 
+              parameters: tool.parameters,
+              error: error.message 
+            }) + '\n');
+          }
         }
       }
       
       res.end();
     } else {
-      // Regular chat completion
-      const response = await aiService.processUserMessage(message, context, tools);
+      // Regular chat completion with tools
+      const response = await aiService.processUserMessage(message, context, availableTools);
+      
+      // Extract tool calls for non-streaming responses
+      const toolCalls = aiService.extractToolCalls(response.message, availableTools);
       
       res.json({
         sessionId,
         message: response.message,
         timestamp: response.timestamp,
-        tools: tools || [],
-        context: context || {}
+        tools: toolCalls,
+        context: context
       });
     }
   } catch (error) {
@@ -54,6 +108,7 @@ router.post('/chat', async (req, res) => {
   }
 });
 
+// Tool execution endpoint (for when tools are called separately)
 router.post('/execute-tool', async (req, res) => {
   try {
     const { toolName, parameters, sessionId, userMessage } = req.body;
@@ -77,41 +132,6 @@ router.post('/execute-tool', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: 'Failed to execute tool',
-      message: error.message
-    });
-  }
-});
-
-router.post('/stream', async (req, res) => {
-  try {
-    const { message, context, tools } = req.body;
-    
-    // Set up streaming response
-    res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Transfer-Encoding', 'chunked');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    
-    const messages = [
-      {
-        role: 'user',
-        content: message
-      }
-    ];
-    
-    const chatCompletion = await aiService.createChatCompletion(messages, { stream: true });
-    
-    for await (const chunk of chatCompletion) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      if (content) {
-        res.write(content);
-      }
-    }
-    
-    res.end();
-  } catch (error) {
-    res.status(500).json({
-      error: 'Failed to stream AI response',
       message: error.message
     });
   }

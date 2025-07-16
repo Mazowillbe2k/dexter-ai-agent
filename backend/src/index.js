@@ -12,10 +12,31 @@ const PORT = process.env.PORT || 3000;
 
 // Security middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN === '*' ? '*' : process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = process.env.CORS_ORIGIN === '*' 
+      ? true 
+      : process.env.CORS_ORIGIN?.split(',') || [
+          'http://localhost:3000',
+          'http://localhost:5173',
+          'http://localhost:4173',
+          'https://dexter-ai-agent-o4wp.onrender.com'
+        ];
+    
+    if (allowedOrigins === true || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
-}));
+};
+
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
